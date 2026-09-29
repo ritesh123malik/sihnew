@@ -282,16 +282,25 @@ class SonarModelService(ModelService):
         collected: list[Detection] = []
         scores: dict[str, float] = {}
 
-        for imgsz in _INFER_SIZES:
-            results = self._model.predict(
-                source=source,
-                imgsz=imgsz,
-                conf=_MODEL_CONF,
-                verbose=False,
-            )
-            if not results:
-                continue
-            collected.extend(self._boxes_from_result(results[0], meta=meta))
+        try:
+            import torch
+            ctx = torch.no_grad()
+        except Exception:
+            from contextlib import nullcontext
+            ctx = nullcontext()
+
+        with ctx:
+            for imgsz in [640]:
+                results = self._model.predict(
+                    source=source,
+                    imgsz=imgsz,
+                    conf=_MODEL_CONF,
+                    verbose=False,
+                )
+                if not results:
+                    continue
+                collected.extend(self._boxes_from_result(results[0], meta=meta))
+
 
         detections = _nms(collected)
 
