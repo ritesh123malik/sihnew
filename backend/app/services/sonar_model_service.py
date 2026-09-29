@@ -27,6 +27,7 @@ _CANDIDATE_WEIGHTS = [
     _REPO_ROOT / "best.pt",
     _BACKEND_DIR / "model" / "best.pt",
     _PROJECT_DIR / "model" / "best.pt",
+    _REPO_ROOT / "model" / "best.pt",
     _REPO_ROOT / "weights" / "best_werb_dgrm_sadh.pt",
     _BACKEND_DIR / "weights" / "best_werb_dgrm_sadh.pt",
     _BACKEND_DIR / "yolov8s.pt",
@@ -97,7 +98,7 @@ class SonarModelService(ModelService):
         # ⭐ D-GRM feature extraction state
         self._hook_features: dict = {}
         self._backbone_hook = None
-        self._proj = None
+        self._dgrm = None
 
     def load(self) -> None:
         from ultralytics import YOLO
@@ -135,9 +136,9 @@ class SonarModelService(ModelService):
     def is_loaded(self) -> bool:
         return self._loaded
 
-    # ⭐ Register forward hook on YOLOv8 backbone's final feature layer
+    # ⭐ Register forward hook on YOLO backbone's final feature layer
     def _register_backbone_hook(self) -> None:
-        """Register forward hook on YOLOv8 backbone's final feature layer for D-GRM."""
+        """Register forward hook on YOLO backbone's final feature layer for D-GRM."""
         try:
             if not hasattr(self._model, "model") or self._model.model is None:
                 return
@@ -145,15 +146,18 @@ class SonarModelService(ModelService):
             model_layers = list(self._model.model.model)
             hook_index = 9
 
-            # Try to find C2f layer dynamically
+            # Look for SPPF layer in backbone (layer 9 in YOLO11 / YOLOv8)
             for i, layer in enumerate(model_layers):
                 layer_name = layer.__class__.__name__
-                if "C2f" in layer_name:
+                if "SPPF" in layer_name:
                     hook_index = i
+                    break
 
             def _make_hook(name):
                 def hook(module, inp, output):
-                    self._hook_features[name] = output.detach()
+                    tensor = output[0] if isinstance(output, (tuple, list)) else output
+                    if hasattr(tensor, "ndim") and tensor.ndim == 4:
+                        self._hook_features[name] = tensor.detach()
                 return hook
 
             # Register hook on the backbone's feature layer
@@ -176,6 +180,7 @@ class SonarModelService(ModelService):
         if self._backbone_hook is not None:
             self._backbone_hook.remove()
             self._backbone_hook = None
+        self._hook_features.clear()
 
     def _boxes_from_result(self, result, meta: dict | None = None) -> list[Detection]:
         detections: list[Detection] = []
@@ -318,11 +323,12 @@ class SonarModelService(ModelService):
             img_h: original image height
 
         Returns:
-            Tensor[N, 256]
+            Tensor[N, C] (e.g. Tensor[N, 512] for YOLO11s)
         """
         import torch
         if len(boxes_xyxy) == 0:
-            return torch.zeros(0, 256)
+            c = backbone_feat_map.shape[1] if hasattr(backbone_feat_map, "shape") and len(backbone_feat_map.shape) > 1 else 512
+            return torch.zeros(0, c)
         feat = backbone_feat_map[0]
         c, h_feat, w_feat = feat.shape
         roi_vecs = []
@@ -335,12 +341,6 @@ class SonarModelService(ModelService):
 
             roi_patch = feat[:, fy1:fy2, fx1:fx2]
             roi_vec = roi_patch.mean(dim=[1, 2])
-
-            if c != 256:
-                if self._proj is None:
-                    self._proj = torch.nn.Linear(c, 256).to(feat.device)
-                roi_vec = self._proj(roi_vec)
-
             roi_vecs.append(roi_vec)
         return torch.stack(roi_vecs, dim=0)
 
@@ -360,20 +360,30 @@ class SonarModelService(ModelService):
                     boxes.append([0.0, 0.0, 10.0, 10.0])
             boxes_tensor = torch.tensor(boxes, dtype=torch.float32)
 
-            # ⭐ Use real features from backbone instead of random
+            feature_dim = 512
             if dgrm_features is not None and len(dgrm_features) == len(detections):
                 graph_features = dgrm_features
+                if hasattr(graph_features, "shape") and len(graph_features.shape) > 1:
+                    feature_dim = graph_features.shape[1]
             else:
-                graph_features = torch.zeros(len(detections), 256)
+                graph_features = torch.zeros(len(detections), feature_dim)
 
-            dgrm = DebrisGraphReasoningModule(input_dim=256)
+            if self._dgrm is None or getattr(self._dgrm, "_input_dim", None) != feature_dim:
+                self._dgrm = DebrisGraphReasoningModule(input_dim=feature_dim)
+                self._dgrm._input_dim = feature_dim
+                self._dgrm.eval()
+
             with torch.no_grad():
-                _, adj = dgrm(graph_features, boxes_tensor)
+                _, adj = self._dgrm(graph_features, boxes_tensor)
                 adj_np = adj.cpu().numpy()
-                for i in range(len(detections)):
-                    connected = (adj_np[i] > 0.3).sum()
-                    if connected > 1:
-                        detections[i].confidence = min(1.0, round(detections[i].confidence * 1.05, 4))
+            updated_detections = list(detections)
+            import dataclasses
+            for i in range(len(detections)):
+                connected = (adj_np[i] > 0.3).sum()
+                if connected > 1:
+                    new_conf = min(1.0, round(detections[i].confidence * 1.05, 4))
+                    updated_detections[i] = dataclasses.replace(detections[i], confidence=new_conf)
+            return updated_detections
         except Exception as exc:
             logger.debug("D-GRM post-processing skipped: %s", exc)
         return detections

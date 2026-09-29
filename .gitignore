@@ -29,4 +29,5 @@ htmlcov/
 *.tar.gz
 backend/export/
 exports/
+outputs/
 
