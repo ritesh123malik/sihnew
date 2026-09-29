@@ -580,13 +580,16 @@ def build_sih_submission_pdf(output_path: str):
 
 if __name__ == "__main__":
     desktop_target = Path("/Users/riteshmalik/Desktop/SIH2026_Idea_Submission_SonarSentry_AI.pdf")
+    present_final_target = Path("/Users/riteshmalik/Desktop/present_final.pdf")
     local_target = Path("SIH2026_Idea_Submission_SonarSentry_AI.pdf")
 
-    print("Generating SIH 2026 Presentation PDF on Desktop...")
+    print("Generating SIH 2026 Presentation PDF on Desktop as present_final.pdf...")
     try:
+        build_sih_submission_pdf(str(present_final_target))
         build_sih_submission_pdf(str(desktop_target))
     except Exception as e:
         print(f"Error writing to desktop: {e}")
 
     print("Generating local repo copy...")
     build_sih_submission_pdf(str(local_target))
+
