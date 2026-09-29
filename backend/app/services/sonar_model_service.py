@@ -13,10 +13,9 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_NAMES = {
     0: "shipwreck",
-    1: "aircraft",
-    2: "submarine_pipeline",
-    3: "ghost_net",
-    4: "mine_munitions",
+    1: "pipe",
+    2: "cylinder",
+    3: "net",
 }
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -24,13 +23,13 @@ _PROJECT_DIR = _BACKEND_DIR
 _REPO_ROOT = _BACKEND_DIR.parent if _BACKEND_DIR.name == "backend" else _BACKEND_DIR
 
 _CANDIDATE_WEIGHTS = [
-    _REPO_ROOT / "model" / "best_yolo11s.pt",
-    _BACKEND_DIR / "model" / "best_yolo11s.pt",
     _BACKEND_DIR / "best.pt",
     _REPO_ROOT / "best.pt",
     _BACKEND_DIR / "model" / "best.pt",
     _PROJECT_DIR / "model" / "best.pt",
     _REPO_ROOT / "model" / "best.pt",
+    _REPO_ROOT / "model" / "best_yolo11s.pt",
+    _BACKEND_DIR / "model" / "best_yolo11s.pt",
     _REPO_ROOT / "weights" / "best_werb_dgrm_sadh.pt",
     _BACKEND_DIR / "weights" / "best_werb_dgrm_sadh.pt",
     _BACKEND_DIR / "yolov8s.pt",
@@ -197,11 +196,12 @@ class SonarModelService(ModelService):
         # ⭐ Initialize ONNX Runtime session first for low-memory cloud deployments (Render 512MB RAM)
         self._onnx_session = None
         for candidate_onnx in [
-            _REPO_ROOT / "model" / "best_yolo11s.onnx",
-            _BACKEND_DIR / "model" / "best_yolo11s.onnx",
+            _REPO_ROOT / "model" / "best.onnx",
+            _BACKEND_DIR / "model" / "best.onnx",
             _REPO_ROOT / "best.onnx",
             _BACKEND_DIR / "best.onnx",
-            _BACKEND_DIR / "model" / "best.onnx",
+            _REPO_ROOT / "model" / "best_yolo11s.onnx",
+            _BACKEND_DIR / "model" / "best_yolo11s.onnx",
         ]:
             if candidate_onnx.is_file():
                 try:
@@ -218,7 +218,18 @@ class SonarModelService(ModelService):
                         sess_options=opts,
                         providers=["CPUExecutionProvider"],
                     )
-                    logger.warning("✅ ONNX Runtime session loaded successfully from %s", candidate_onnx)
+                    # Extract class names from ONNX metadata if available
+                    try:
+                        meta = self._onnx_session.get_modelmeta().custom_metadata_map
+                        if "names" in meta:
+                            import ast
+                            loaded_names = ast.literal_eval(meta["names"])
+                            if isinstance(loaded_names, dict) and loaded_names:
+                                self._names = {int(k): str(v) for k, v in loaded_names.items()}
+                    except Exception as meta_exc:
+                        logger.warning("Could not read names from ONNX metadata: %s", meta_exc)
+
+                    logger.warning("✅ ONNX Runtime session loaded successfully from %s with classes: %s", candidate_onnx, self._names)
                     self._loaded = True
                     break
                 except Exception as exc:
@@ -627,7 +638,7 @@ class SonarModelService(ModelService):
 
     def metadata(self) -> ModelMetadata:
         return ModelMetadata(
-            name="sih2026-yolo11s-sonar-detection",
+            name="sih2026-yolov8s-marine-debris",
             version="colab-best",
             provider="sonar",
         )

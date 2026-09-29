@@ -1,11 +1,11 @@
-# Sonar Anomaly Detection Model
+# Model
 
-- **Architecture:** Ultralytics YOLO11s (`yolo11s`)
-- **Author:** Sanyam (`2007sanyam@gmail.com`)
-- **Training Run:** `yolo11s_sonar_20260928_140551` (Google Colab GPU)
-- **Input Resolution:** `800x800`
-- **Classes (5):** `shipwreck`, `aircraft`, `submarine_pipeline`, `ghost_net`, `mine_munitions`
-- **Files:**
-  - `best_yolo11s.onnx` — Production ONNX runtime engine (low memory, high speed)
-  - `best_yolo11s.pt` / `best.pt` — PyTorch checkpoint weights
+This folder holds the Colab-trained YOLOv8s marine-debris checkpoint (original baseline).
 
+- **Architecture:** Ultralytics YOLOv8s (`yolov8s`)
+- **Source run:** `sih2026_yolov8s_marine_debris`
+- **File:** `best.pt` / `best.onnx`
+- **Input Resolution:** `640x640`
+- **Classes in the checkpoint:** `shipwreck`, `pipe`, `cylinder`, `net`
+
+The backend loads this file when `MODEL_PROVIDER=sonar`.
