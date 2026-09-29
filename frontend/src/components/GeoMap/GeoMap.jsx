@@ -3,6 +3,8 @@ import { CircleMarker, ImageOverlay, MapContainer, Polygon, Polyline, Popup, Til
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import styles from './GeoMap.module.css'
+import { API_BASE } from '../../api/client'
+
 
 const SATELLITE = {
   url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -145,16 +147,17 @@ export default function GeoMap({
       for (const detection of detections) {
         if (detection.geotiff_available) {
           try {
-            const response = await fetch(`/api/export/geotiff/${detection.id}/bounds`)
+            const response = await fetch(`${API_BASE}/api/export/geotiff/${detection.id}/bounds`)
             if (response.ok) {
               const boundsData = await response.json()
               overlays.push({
                 id: detection.id,
-                imageUrl: boundsData.image_url || `/api/export/geotiff/${detection.id}/render`,
+                imageUrl: boundsData.image_url || `${API_BASE}/api/export/geotiff/${detection.id}/render`,
                 bounds: [[boundsData.south, boundsData.west], [boundsData.north, boundsData.east]],
                 opacity: opacity
               })
             }
+
           } catch (error) {
             console.debug(`Failed to fetch GeoTIFF bounds for detection ${detection.id}:`, error)
           }

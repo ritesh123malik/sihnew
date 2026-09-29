@@ -7,7 +7,9 @@ import WebSocketStatus from '../components/common/WebSocketStatus';
 import ProgressBar from '../components/common/ProgressBar';
 import AnomalyModal from '../components/AnomalyModal/AnomalyModal';
 import Toast from '../components/common/Toast';
+import { API_BASE } from '../api/client';
 import '../App.css';
+
 
 export default function LiveSurvey() {
   const [wsStatus, setWsStatus] = useState('connected');
@@ -61,10 +63,11 @@ export default function LiveSurvey() {
 
     try {
       const endpoint = file.name.endsWith('.xtf') ? '/api/xtf/upload' : '/api/detect';
-      const res = await fetch(endpoint, {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         body: formData,
       });
+
 
       clearInterval(interval);
       setUploadProgress(100);

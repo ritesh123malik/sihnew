@@ -8,11 +8,19 @@ export default function useWaterfallStream(customUrl) {
   const ws = useRef(null)
 
   const defaultUrl = (() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    let apiUrl = import.meta.env.VITE_API_URL
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname || ''
+      if (host.includes('render.com') || host.includes('onrender.com')) {
+        apiUrl = 'https://sihnew-backend.onrender.com'
+      }
+    }
+    apiUrl = apiUrl || 'http://localhost:8000'
     const wsProto = apiUrl.startsWith('https') ? 'wss:' : 'ws:'
     const host = apiUrl.replace(/^https?:\/\//, '')
     return `${wsProto}//${host}/ws/waterfall`
   })()
+
 
   const url = customUrl || import.meta.env.VITE_WS_URL || defaultUrl
 

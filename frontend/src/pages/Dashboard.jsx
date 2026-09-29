@@ -6,7 +6,9 @@ import WaterfallCanvas from '../components/Waterfall/WaterfallCanvas';
 import LiveDetectionFeed from '../components/LiveSurvey/LiveDetectionFeed';
 import DetectionCard from '../components/DetectionCard/DetectionCard';
 import AnomalyModal from '../components/AnomalyModal/AnomalyModal';
+import { API_BASE } from '../api/client';
 import '../App.css';
+
 
 export default function Dashboard() {
   const [selectedAnomaly, setSelectedAnomaly] = useState(null);
@@ -47,8 +49,9 @@ export default function Dashboard() {
   ]);
 
   useEffect(() => {
-    fetch('/api/anomalies')
+    fetch(`${API_BASE}/api/anomalies`)
       .then((res) => res.json())
+
       .then((data) => {
         if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
           setDetections(data.data);

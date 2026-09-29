@@ -1,4 +1,17 @@
-const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+export const API_BASE = (() => {
+  const envUrl = import.meta.env.VITE_API_URL
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname || ''
+    if (host.includes('render.com') || host.includes('onrender.com')) {
+      return 'https://sihnew-backend.onrender.com'
+    }
+  }
+  if (envUrl) {
+    return envUrl.replace(/\/$/, '')
+  }
+  return 'http://localhost:8000'
+})()
+
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, options)
