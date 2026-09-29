@@ -319,13 +319,23 @@ class SonarModelService(ModelService):
 
         collected: list[Detection] = []
         scores: dict[str, float] = {}
+        onnx_succeeded = False
 
         if getattr(self, "_onnx_session", None) is not None:
             try:
                 # Fast, lightweight ONNX Runtime inference (35MB RAM, 15ms)
                 source_rgb = source.convert("RGB") if source.mode != "RGB" else source
                 orig_w, orig_h = source_rgb.size
-                img_resized = source_rgb.resize((640, 640), Image.BILINEAR)
+                if meta and "orig_shape" in meta:
+                    sh = meta["orig_shape"]
+                    if len(sh) >= 2 and sh[0] > 0 and sh[1] > 0:
+                        orig_h, orig_w = float(sh[0]), float(sh[1])
+
+                inp_shape = self._onnx_session.get_inputs()[0].shape
+                target_h = int(inp_shape[2]) if len(inp_shape) > 2 and isinstance(inp_shape[2], (int, np.integer)) and inp_shape[2] > 0 else 800
+                target_w = int(inp_shape[3]) if len(inp_shape) > 3 and isinstance(inp_shape[3], (int, np.integer)) and inp_shape[3] > 0 else 800
+
+                img_resized = source_rgb.resize((target_w, target_h), Image.BILINEAR)
                 arr = np.array(img_resized, dtype=np.float32) / 255.0
                 arr = np.transpose(arr, (2, 0, 1))
                 tensor_in = np.expand_dims(arr, axis=0)
@@ -340,8 +350,8 @@ class SonarModelService(ModelService):
                 max_scores = np.max(class_scores, axis=1)
                 max_classes = np.argmax(class_scores, axis=1)
 
-                scale_x = orig_w / 640.0
-                scale_y = orig_h / 640.0
+                scale_x = orig_w / float(target_w)
+                scale_y = orig_h / float(target_h)
 
                 for i in range(len(max_scores)):
                     conf = float(max_scores[i])
@@ -367,10 +377,12 @@ class SonarModelService(ModelService):
                             position_info=f"{int(x1)},{int(y1)}",
                         )
                     )
+                onnx_succeeded = True
             except Exception as onnx_exc:
                 logger.warning("ONNX inference failed: %s. Falling back to PyTorch.", onnx_exc)
+                onnx_succeeded = False
 
-        if not collected and self._model is not None:
+        if not onnx_succeeded and self._model is not None:
             try:
                 import torch
                 ctx = torch.no_grad()
@@ -380,17 +392,17 @@ class SonarModelService(ModelService):
 
             with ctx:
                 for imgsz in [640]:
-                    results = self._model.predict(
-                        source=source,
-                        imgsz=imgsz,
-                        conf=_MODEL_CONF,
-                        verbose=False,
-                    )
-                    if not results:
-                        continue
-                    collected.extend(self._boxes_from_result(results[0], meta=meta))
-
-
+                    try:
+                        results = self._model.predict(
+                            source=source,
+                            imgsz=imgsz,
+                            conf=_MODEL_CONF,
+                            verbose=False,
+                        )
+                        if results:
+                            collected.extend(self._boxes_from_result(results[0], meta=meta))
+                    except Exception as pt_err:
+                        logger.warning("PyTorch predict failed: %s", pt_err)
 
         detections = _nms(collected)
 
