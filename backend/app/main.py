@@ -80,6 +80,7 @@ def create_app() -> FastAPI:
     from app.api.routes.ab import router as ab_router
     from app.api.routes.export import router as export_router
     from app.api.routes.salvage import router as salvage_router
+    from app.api.routes.bathymetry import router as bathymetry_router
     from app.services.model_watcher import watcher as model_watcher
 
     from app.api.routes.v1 import router as v1_router
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     application.include_router(ab_router)
     application.include_router(export_router)
     application.include_router(salvage_router)
+    application.include_router(bathymetry_router)
     application.include_router(v1_router)
 
     try:

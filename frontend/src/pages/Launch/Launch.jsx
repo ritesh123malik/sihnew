@@ -41,7 +41,7 @@ export default function Launch() {
   const [previewUrl, setPreviewUrl] = useState('')
   const [settings, setSettings] = useState({
     confidence: 20,
-    selected: ['Debris', 'Shipwreck', 'Rocks', 'Other'],
+    selected: ['Ghost Net', 'Shipwreck', 'Submarine Pipeline', 'Mine / Munitions', 'Aircraft', 'Geology / Rocks', 'Debris', 'Other'],
   })
   const [pipeline, setPipeline] = useState('idle')
   const [error, setError] = useState('')

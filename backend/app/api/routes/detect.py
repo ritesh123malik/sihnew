@@ -171,11 +171,49 @@ async def detect(
             run_repo.update(run.id, status="failed", error_message="XTF parsing failed")
             raise InvalidFileTypeError("Corrupt or invalid Triton XTF file")
 
-    try:
-        prediction_result = inference_service.predict(inference_payload)
-    except Exception:
-        run_repo.update(run.id, status="failed", error_message="Inference failed")
-        raise InferenceFailedError()
+    prediction_result = None
+    if is_xtf and "waterfall_np" in locals() and waterfall_np is not None and waterfall_np.shape[0] > 700:
+        try:
+            from app.preprocessing.waterfall_tiler import WaterfallTiler
+            from app.schemas.ml import PredictionResult
+            tiler = WaterfallTiler(tile_height=640, tile_width=640, overlap=0.20)
+            tiles = tiler.slice_waterfall(waterfall_np)
+            accumulated_dets = []
+            scores = {}
+            for tile_np, start_y, end_y in tiles:
+                tile_success, tile_png = cv2.imencode(".png", tile_np)
+                if tile_success:
+                    tile_res = inference_service.predict(tile_png.tobytes())
+                    if tile_res.detections:
+                        proj_dets = tiler.project_detections_to_global(
+                            tile_res.detections,
+                            start_ping=start_y,
+                            orig_width=waterfall_np.shape[1],
+                            tile_width=tile_np.shape[1],
+                        )
+                        accumulated_dets.extend(proj_dets)
+                    for k, v in tile_res.raw_scores.items():
+                        scores[k] = max(scores.get(k, 0.0), v)
+
+            merged_dets = WaterfallTiler.apply_global_seam_nms(accumulated_dets, iou_threshold=0.45)
+            best_label = max(merged_dets, key=lambda d: d.confidence).class_label if merged_dets else "no_detection"
+            best_conf = max(merged_dets, key=lambda d: d.confidence).confidence if merged_dets else 0.0
+            prediction_result = PredictionResult(
+                label=best_label,
+                confidence=best_conf,
+                raw_scores=scores,
+                detections=merged_dets,
+            )
+        except Exception as e:
+            logger.warning("Tiled inference fallback to standard: %s", e)
+            prediction_result = None
+
+    if prediction_result is None:
+        try:
+            prediction_result = inference_service.predict(inference_payload)
+        except Exception:
+            run_repo.update(run.id, status="failed", error_message="Inference failed")
+            raise InferenceFailedError()
 
     normalizer = ResultNormalizer()
     detections, summary = normalizer.normalize(prediction_result)
@@ -328,22 +366,28 @@ _CLASS_GROUPS = {
         "debris",
         "marine debris",
         "fishing net",
-        "container",
+        "ghost net",
+        "ghost_net",
+        "net",
+        "pipe",
+        "cylinder",
         "plastic",
         "plastic bag",
+        "container",
         "metal fragment",
         "metal scrap",
         "metal drum",
         "tyre",
         "tire",
-        "pipe",
         "bottle",
         "can",
-        "cylinder",
-        "net",
+        "submarine_pipeline",
+        "submarine pipeline",
+        "pipeline",
     },
-    "shipwreck": {"shipwreck", "aircraft"},
-    "rocks": {"rock", "rock formation", "rocks"},
+    "shipwreck": {"shipwreck", "wreck", "aircraft", "sunken vessel"},
+    "munitions": {"mine_munitions", "mine", "munitions", "unexploded ordnance", "uxo", "torpedo", "bomb"},
+    "rocks": {"rock", "rock formation", "rocks", "geology", "reef"},
 }
 
 

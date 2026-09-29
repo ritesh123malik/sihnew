@@ -1,0 +1,11 @@
+class_name,optimal_threshold
+mine_munitions,0.289
+shipwreck,0.326
+ghost_net,0.814
+submarine_pipeline,0.450
+debris,0.500
+rock,0.600
+aircraft,0.350
+pipe,0.450
+cylinder,0.400
+net,0.750

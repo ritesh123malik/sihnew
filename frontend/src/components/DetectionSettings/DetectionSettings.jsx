@@ -1,6 +1,16 @@
 import styles from './DetectionSettings.module.css'
 
-const CLASSES = ['Debris', 'Shipwreck', 'Rocks', 'Other']
+export const SONAR_CLASSES = [
+  'Ghost Net',
+  'Shipwreck',
+  'Submarine Pipeline',
+  'Mine / Munitions',
+  'Aircraft',
+  'Geology / Rocks',
+  'Debris',
+  'Other'
+]
+const CLASSES = SONAR_CLASSES
 
 export default function DetectionSettings({ value, onChange }) {
   const { confidence, selected } = value

@@ -3,7 +3,8 @@ import Topbar from '../components/Topbar/Topbar';
 import Footer from '../components/Layout/Footer';
 import ShadowCurveChart from '../components/AnomalyModal/ShadowCurveChart';
 import RiskBadge from '../components/common/RiskBadge';
-import Seabed3DViewer from '../components/Bathymetry/Seabed3DViewer';
+import Seabed3DViewer from '../components/Seabed3DViewer/Seabed3DViewer';
+import BathymetryControls from '../components/BathymetryControls/BathymetryControls';
 import '../App.css';
 
 export default function AnomalyInspector() {
@@ -22,6 +23,22 @@ export default function AnomalyInspector() {
     towfishLayback: 42.1,
     heading: 68.4,
   });
+
+  const [bathymetrySettings, setBathymetrySettings] = useState({
+    colorScheme: 'elevation',
+    showWater: true,
+    showShadows: true,
+    showTargets: true,
+    showGrid: true,
+    elevationScale: 4.5,
+    pointSize: 3,
+    wireframe: false,
+    fogEnabled: true
+  });
+
+  const handleExportBathymetry = (format) => {
+    alert(`Exporting 3D Bathymetry as ${format.toUpperCase()} (EPSG:4326 Datum)`);
+  };
 
   return (
     <>
@@ -123,11 +140,21 @@ export default function AnomalyInspector() {
         </div>
 
         {/* Interactive 3D Seabed Bathymetric Topography */}
-        <div style={{ marginTop: '16px' }}>
-          <Seabed3DViewer
-            altitude={selectedTarget.altitude}
-            depth={selectedTarget.targetHeight ? 24.5 : 25.0}
-          />
+        <div style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 280px', gap: '16px' }}>
+          <div style={{ height: '420px' }}>
+            <Seabed3DViewer
+              altitude={selectedTarget.altitude}
+              depth={selectedTarget.targetHeight ? 24.5 : 25.0}
+              settings={bathymetrySettings}
+            />
+          </div>
+          <div>
+            <BathymetryControls
+              settings={bathymetrySettings}
+              onSettingsChange={setBathymetrySettings}
+              onExport={handleExportBathymetry}
+            />
+          </div>
         </div>
       </div>
 

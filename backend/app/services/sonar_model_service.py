@@ -37,6 +37,36 @@ _INFER_SIZES = (640, 960)
 _MODEL_CONF = 0.12
 _NMS_IOU = 0.45
 
+# Load per-class optimal thresholds
+_PER_CLASS_THRESHOLDS: dict[str, float] = {}
+for _t_path in [
+    _BACKEND_DIR / "app" / "configs" / "per_class_thresholds.csv",
+    _REPO_ROOT / "configs" / "per_class_thresholds.csv",
+    _BACKEND_DIR / "configs" / "per_class_thresholds.csv",
+]:
+    if _t_path.is_file():
+        try:
+            with open(_t_path, mode="r", encoding="utf-8") as _f:
+                for line in _f:
+                    parts = line.strip().split(",")
+                    if len(parts) == 2:
+                        try:
+                            _PER_CLASS_THRESHOLDS[parts[0].strip().lower()] = float(parts[1].strip())
+                        except ValueError:
+                            pass
+            if _PER_CLASS_THRESHOLDS:
+                break
+        except Exception:
+            pass
+
+
+def get_class_threshold(class_name: str, default: float = _MODEL_CONF) -> float:
+    """Get per-class confidence threshold with fallback."""
+    if not class_name:
+        return default
+    normalized = class_name.lower().replace(" ", "_").strip()
+    return _PER_CLASS_THRESHOLDS.get(normalized, _PER_CLASS_THRESHOLDS.get(class_name.lower(), default))
+
 
 def _pretty_label(name: str) -> str:
     return name.replace("_", " ").strip().title()
@@ -135,9 +165,9 @@ class SonarModelService(ModelService):
     def is_loaded(self) -> bool:
         return self._loaded
 
-    # ⭐ Register forward hook on YOLOv8 backbone's final feature layer
+    # ⭐ Register forward hook on YOLOv8/v11/WERB backbone's final feature layer
     def _register_backbone_hook(self) -> None:
-        """Register forward hook on YOLOv8 backbone's final feature layer for D-GRM."""
+        """Register forward hook on backbone's feature layer for D-GRM."""
         try:
             if not hasattr(self._model, "model") or self._model.model is None:
                 return
@@ -145,10 +175,10 @@ class SonarModelService(ModelService):
             model_layers = list(self._model.model.model)
             hook_index = 9
 
-            # Try to find C2f layer dynamically
+            # Dynamically detect C2f (YOLOv8), C3k2 / C2PSA (YOLO11), Bottleneck, or WERBBlock
             for i, layer in enumerate(model_layers):
                 layer_name = layer.__class__.__name__
-                if "C2f" in layer_name:
+                if any(k in layer_name for k in ("C2f", "C3k2", "C2PSA", "Bottleneck", "WERBBlock")):
                     hook_index = i
 
             def _make_hook(name):
