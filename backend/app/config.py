@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     sss_enable_shadow_inpainting: bool = True
     sss_shadow_threshold: float = 0.15
     sss_shadow_inpaint_method: str = "telea"
-    yolo_target_size: tuple[int, int] = (640, 640)
+    yolo_target_size: tuple[int, int] = (800, 800)
     yolo_normalize: bool = True
 
     database_url: str = "sqlite:///./sonar_sentry.db"

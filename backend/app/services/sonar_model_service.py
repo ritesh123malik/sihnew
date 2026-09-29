@@ -128,19 +128,43 @@ class SonarModelService(ModelService):
     def __init__(self, model_path: str = "") -> None:
         self._configured_path = model_path
         self._resolved_path: Path | None = None
-        self._model = None
+        self._pytorch_model = None
+        self._loading_pytorch = False
         self._names: dict[int, str] = dict(_DEFAULT_NAMES)
         self._loaded = False
         self._onnx_session = None
         # ⭐ D-GRM feature extraction state
         self._hook_features: dict = {}
-        self._backbone_hook = None
+        self._backbone_hook_ref = None
         self._dgrm = None
+
+    @property
+    def _backbone_hook(self):
+        if self._backbone_hook_ref is None and self._pytorch_model is None and not self._loading_pytorch:
+            self._load_pytorch_model()
+        return self._backbone_hook_ref
+
+    @_backbone_hook.setter
+    def _backbone_hook(self, val):
+        self._backbone_hook_ref = val
+
+    @property
+    def _model(self):
+        if self._pytorch_model is None and not self._loading_pytorch:
+            self._load_pytorch_model()
+        return self._pytorch_model
+
+    @_model.setter
+    def _model(self, val):
+        self._pytorch_model = val
 
     def _load_pytorch_model(self) -> bool:
         """Lazily load PyTorch weights only if ONNX is unavailable or fails."""
-        if self._model is not None:
+        if self._pytorch_model is not None:
             return True
+        if self._loading_pytorch:
+            return False
+        self._loading_pytorch = True
         try:
             from ultralytics import YOLO
 
@@ -153,9 +177,9 @@ class SonarModelService(ModelService):
             for candidate in candidate_list:
                 if candidate and candidate.is_file():
                     try:
-                        self._model = YOLO(str(candidate))
+                        self._pytorch_model = YOLO(str(candidate))
                         self._resolved_path = candidate
-                        names = getattr(self._model, "names", None)
+                        names = getattr(self._pytorch_model, "names", None)
                         if isinstance(names, dict) and names:
                             self._names = {int(k): str(v) for k, v in names.items()}
                         self._register_backbone_hook()
@@ -165,6 +189,8 @@ class SonarModelService(ModelService):
                         logger.warning("Could not load weights from %s: %s", candidate, exc)
         except Exception as e:
             logger.warning("Could not import or initialize Ultralytics PyTorch: %s", e)
+        finally:
+            self._loading_pytorch = False
         return False
 
     def load(self) -> None:
@@ -342,25 +368,41 @@ class SonarModelService(ModelService):
 
         if getattr(self, "_onnx_session", None) is not None:
             tensor_in = None
-            arr = None
-            img_resized = None
             try:
-                # Fast, lightweight ONNX Runtime inference (35MB RAM, 15ms)
-                source_rgb = source.convert("RGB") if source.mode != "RGB" else source
-                orig_w, orig_h = source_rgb.size
-                if meta and "orig_shape" in meta:
-                    sh = meta["orig_shape"]
-                    if len(sh) >= 2 and sh[0] > 0 and sh[1] > 0:
-                        orig_h, orig_w = float(sh[0]), float(sh[1])
-
                 inp_shape = self._onnx_session.get_inputs()[0].shape
                 target_h = int(inp_shape[2]) if len(inp_shape) > 2 and isinstance(inp_shape[2], (int, np.integer)) and inp_shape[2] > 0 else 800
                 target_w = int(inp_shape[3]) if len(inp_shape) > 3 and isinstance(inp_shape[3], (int, np.integer)) and inp_shape[3] > 0 else 800
 
-                img_resized = source_rgb.resize((target_w, target_h), Image.BILINEAR)
-                arr = np.array(img_resized, dtype=np.float32) / 255.0
-                arr = np.transpose(arr, (2, 0, 1))
-                tensor_in = np.expand_dims(arr, axis=0)
+                # Fast direct passthrough if already a preprocessed (3, H, W) tensor
+                if isinstance(raw, np.ndarray) and raw.ndim == 3 and raw.shape[0] == 3 and raw.shape[1] == target_h and raw.shape[2] == target_w:
+                    tensor_in = np.expand_dims(raw, axis=0).astype(np.float32)
+                else:
+                    # Clean aspect-ratio letterbox
+                    import cv2
+                    img_np = np.array(source.convert("RGB"))
+                    h_in, w_in = img_np.shape[:2]
+                    scale = min(target_h / float(h_in), target_w / float(w_in))
+                    nw = int(round(w_in * scale))
+                    nh = int(round(h_in * scale))
+                    pad_l = (target_w - nw) // 2
+                    pad_t = (target_h - nh) // 2
+                    resized = cv2.resize(img_np, (nw, nh), interpolation=cv2.INTER_LINEAR)
+                    padded = cv2.copyMakeBorder(
+                        resized,
+                        pad_t,
+                        target_h - nh - pad_t,
+                        pad_l,
+                        target_w - nw - pad_l,
+                        cv2.BORDER_CONSTANT,
+                        value=(114, 114, 114),
+                    )
+                    tensor_in = padded.transpose((2, 0, 1))[None].astype(np.float32) / 255.0
+                    meta = {
+                        "scale": scale,
+                        "pad_left": pad_l,
+                        "pad_top": pad_t,
+                        "orig_shape": (h_in, w_in),
+                    }
 
                 input_name = self._onnx_session.get_inputs()[0].name
                 onnx_out = self._onnx_session.run(None, {input_name: tensor_in})[0]
@@ -372,29 +414,44 @@ class SonarModelService(ModelService):
                 max_scores = np.max(class_scores, axis=1)
                 max_classes = np.argmax(class_scores, axis=1)
 
-                scale_x = orig_w / float(target_w)
-                scale_y = orig_h / float(target_h)
+                has_letterbox = meta and "scale" in meta and float(meta.get("scale", 0)) > 0
+                scale = float(meta["scale"]) if has_letterbox else 1.0
+                pad_left = float(meta.get("pad_left", 0)) if has_letterbox else 0.0
+                pad_top = float(meta.get("pad_top", 0)) if has_letterbox else 0.0
+                orig_shape = meta.get("orig_shape") if has_letterbox else None
+                orig_h = float(orig_shape[0]) if orig_shape else None
+                orig_w = float(orig_shape[1]) if orig_shape else None
 
                 for i in range(len(max_scores)):
                     conf = float(max_scores[i])
                     cls_id = int(max_classes[i])
                     raw_name = self._names.get(cls_id, f"class_{cls_id}")
-                    class_thresh = get_class_threshold(raw_name, _MODEL_CONF)
-                    if conf < class_thresh:
+                    if conf < _MODEL_CONF:
                         continue
 
                     cx, cy, bw, bh = boxes[i]
-                    x1 = (cx - bw / 2.0) * scale_x
-                    y1 = (cy - bh / 2.0) * scale_y
-                    w_scaled = bw * scale_x
-                    h_scaled = bh * scale_y
+                    if has_letterbox:
+                        x1 = (cx - bw / 2.0 - pad_left) / scale
+                        y1 = (cy - bh / 2.0 - pad_top) / scale
+                        w_scaled = bw / scale
+                        h_scaled = bh / scale
+                        if orig_w is not None and orig_h is not None:
+                            x1 = max(0.0, min(orig_w, x1))
+                            y1 = max(0.0, min(orig_h, y1))
+                            w_scaled = max(0.0, min(orig_w - x1, w_scaled))
+                            h_scaled = max(0.0, min(orig_h - y1, h_scaled))
+                    else:
+                        x1 = cx - bw / 2.0
+                        y1 = cy - bh / 2.0
+                        w_scaled = bw
+                        h_scaled = bh
 
                     label = _pretty_label(raw_name)
                     collected.append(
                         Detection(
                             class_label=label,
                             confidence=round(conf, 4),
-                            bbox=BBox(x=float(max(0, x1)), y=float(max(0, y1)), width=float(w_scaled), height=float(h_scaled)),
+                            bbox=BBox(x=float(x1), y=float(y1), width=float(w_scaled), height=float(h_scaled)),
                             area_m2=round((w_scaled * h_scaled) / 10000.0, 2),
                             position_info=f"{int(x1)},{int(y1)}",
                         )
@@ -404,10 +461,8 @@ class SonarModelService(ModelService):
                 logger.warning("ONNX inference failed: %s. Falling back to PyTorch.", onnx_exc)
                 onnx_succeeded = False
             finally:
-                try:
-                    del tensor_in, arr, img_resized
-                except Exception:
-                    pass
+                if tensor_in is not None:
+                    del tensor_in
                 import gc
                 gc.collect()
 
@@ -422,7 +477,7 @@ class SonarModelService(ModelService):
                     ctx = nullcontext()
 
                 with ctx:
-                    for imgsz in [640]:
+                    for imgsz in [800]:
                         try:
                             results = self._model.predict(
                                 source=source,

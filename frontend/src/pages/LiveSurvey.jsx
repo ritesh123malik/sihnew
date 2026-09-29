@@ -60,6 +60,7 @@ export default function LiveSurvey() {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('confidence_threshold', '20');
 
     try {
       const endpoint = file.name.endsWith('.xtf') ? '/api/xtf/upload' : '/api/detect';

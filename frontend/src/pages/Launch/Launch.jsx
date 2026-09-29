@@ -124,16 +124,14 @@ export default function Launch() {
       formData.append('resolution', DEFAULT_METADATA.resolution)
       formData.append('depth_min', String(depthMin))
       formData.append('depth_max', String(depthMax))
-      if (confidenceTouched) {
-        formData.append('confidence_threshold', String(settings.confidence))
-      }
+      formData.append('confidence_threshold', String(settings.confidence))
       formData.append('selected_classes', settings.selected.join(','))
       formData.append('min_object_size', '10')
 
       const result = await detectScan(formData)
       rememberScan(result.run_id)
       setPipeline('done')
-      navigate(`/results/${result.run_id}${confidenceTouched ? `?threshold=${settings.confidence}` : ''}`)
+      navigate(`/results/${result.run_id}?threshold=${settings.confidence}`)
     } catch (err) {
       if (instanceOnly) {
         localStorage.removeItem(LAST_SCAN_KEY)
