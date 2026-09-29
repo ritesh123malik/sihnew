@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_NAMES = {
     0: "shipwreck",
-    1: "pipe",
-    2: "cylinder",
-    3: "net",
+    1: "aircraft",
+    2: "submarine_pipeline",
+    3: "ghost_net",
+    4: "mine_munitions",
 }
 
 _BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -47,6 +48,8 @@ for _t_path in [
     _BACKEND_DIR / "app" / "configs" / "per_class_thresholds.csv",
     _REPO_ROOT / "configs" / "per_class_thresholds.csv",
     _BACKEND_DIR / "configs" / "per_class_thresholds.csv",
+    _REPO_ROOT / "model" / "per_class_thresholds.csv",
+    _BACKEND_DIR / "model" / "per_class_thresholds.csv",
 ]:
     if _t_path.is_file():
         try:
@@ -128,69 +131,85 @@ class SonarModelService(ModelService):
         self._model = None
         self._names: dict[int, str] = dict(_DEFAULT_NAMES)
         self._loaded = False
+        self._onnx_session = None
         # ⭐ D-GRM feature extraction state
         self._hook_features: dict = {}
         self._backbone_hook = None
         self._dgrm = None
 
+    def _load_pytorch_model(self) -> bool:
+        """Lazily load PyTorch weights only if ONNX is unavailable or fails."""
+        if self._model is not None:
+            return True
+        try:
+            from ultralytics import YOLO
+
+            try:
+                self._resolved_path = resolve_model_path(self._configured_path)
+            except Exception:
+                self._resolved_path = None
+
+            candidate_list = ([self._resolved_path] if self._resolved_path else []) + _CANDIDATE_WEIGHTS
+            for candidate in candidate_list:
+                if candidate and candidate.is_file():
+                    try:
+                        self._model = YOLO(str(candidate))
+                        self._resolved_path = candidate
+                        names = getattr(self._model, "names", None)
+                        if isinstance(names, dict) and names:
+                            self._names = {int(k): str(v) for k, v in names.items()}
+                        self._register_backbone_hook()
+                        logger.warning("✅ PyTorch model loaded successfully from %s", candidate)
+                        return True
+                    except Exception as exc:
+                        logger.warning("Could not load weights from %s: %s", candidate, exc)
+        except Exception as e:
+            logger.warning("Could not import or initialize Ultralytics PyTorch: %s", e)
+        return False
+
     def load(self) -> None:
-        # ⭐ Initialize ONNX Runtime session first for low-memory cloud deployments
+        # ⭐ Initialize ONNX Runtime session first for low-memory cloud deployments (Render 512MB RAM)
         self._onnx_session = None
         for candidate_onnx in [
-            _REPO_ROOT / "best.onnx",
-            _BACKEND_DIR / "best.onnx",
             _REPO_ROOT / "model" / "best_yolo11s.onnx",
             _BACKEND_DIR / "model" / "best_yolo11s.onnx",
+            _REPO_ROOT / "best.onnx",
+            _BACKEND_DIR / "best.onnx",
             _BACKEND_DIR / "model" / "best.onnx",
         ]:
-
             if candidate_onnx.is_file():
                 try:
                     import onnxruntime as ort
 
+                    opts = ort.SessionOptions()
+                    opts.intra_op_num_threads = 1
+                    opts.inter_op_num_threads = 1
+                    opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                    opts.enable_cpu_mem_arena = False
+
                     self._onnx_session = ort.InferenceSession(
-                        str(candidate_onnx), providers=["CPUExecutionProvider"]
+                        str(candidate_onnx),
+                        sess_options=opts,
+                        providers=["CPUExecutionProvider"],
                     )
-                    logger.info("✅ ONNX Runtime session loaded successfully from %s", candidate_onnx)
+                    logger.warning("✅ ONNX Runtime session loaded successfully from %s", candidate_onnx)
+                    self._loaded = True
                     break
                 except Exception as exc:
-                    logger.debug("Could not load ONNX session from %s: %s", candidate_onnx, exc)
+                    logger.warning("Could not load ONNX session from %s: %s", candidate_onnx, exc)
 
-        from ultralytics import YOLO
-
-        try:
-            self._resolved_path = resolve_model_path(self._configured_path)
-        except Exception:
-            self._resolved_path = None
-
-        candidate_list = ([self._resolved_path] if self._resolved_path else []) + _CANDIDATE_WEIGHTS
-        loaded_successfully = False
-
-        for candidate in candidate_list:
-            if candidate and candidate.is_file():
-                try:
-                    self._model = YOLO(str(candidate))
-                    self._resolved_path = candidate
-                    loaded_successfully = True
-                    break
-                except Exception as exc:
-                    logger.warning("Could not load weights from %s: %s. Trying next candidate...", candidate, exc)
-
-        if not loaded_successfully and self._onnx_session is None:
-            raise RuntimeError("Failed to load any valid YOLO weights or ONNX model.")
-
-        if self._model is not None:
-            names = getattr(self._model, "names", None)
-            if isinstance(names, dict) and names:
-                self._names = {int(k): str(v) for k, v in names.items()}
-            self._register_backbone_hook()
-
-        self._loaded = True
-
+        # Only load PyTorch if ONNX is NOT present (saves ~350MB RAM on Render 512MB free tier)
+        if self._onnx_session is None:
+            if self._load_pytorch_model():
+                self._loaded = True
+            else:
+                raise RuntimeError("Failed to load any valid ONNX model or YOLO weights.")
+        else:
+            self._loaded = True
 
     @property
     def is_loaded(self) -> bool:
-        return self._loaded
+        return self._loaded and (self._onnx_session is not None or self._model is not None)
 
     # ⭐ Register forward hook on YOLO backbone's final feature layer (SPPF / C2f / C3k2 / C2PSA / WERBBlock)
     def _register_backbone_hook(self) -> None:
@@ -293,7 +312,7 @@ class SonarModelService(ModelService):
         return detections
 
     def predict(self, input_data: PreprocessedInput) -> PredictionResult:
-        if not self._loaded or self._model is None:
+        if not self.is_loaded:
             raise RuntimeError("Model has not been loaded. Call load() first.")
 
         import numpy as np
@@ -322,6 +341,9 @@ class SonarModelService(ModelService):
         onnx_succeeded = False
 
         if getattr(self, "_onnx_session", None) is not None:
+            tensor_in = None
+            arr = None
+            img_resized = None
             try:
                 # Fast, lightweight ONNX Runtime inference (35MB RAM, 15ms)
                 source_rgb = source.convert("RGB") if source.mode != "RGB" else source
@@ -381,28 +403,37 @@ class SonarModelService(ModelService):
             except Exception as onnx_exc:
                 logger.warning("ONNX inference failed: %s. Falling back to PyTorch.", onnx_exc)
                 onnx_succeeded = False
+            finally:
+                try:
+                    del tensor_in, arr, img_resized
+                except Exception:
+                    pass
+                import gc
+                gc.collect()
 
-        if not onnx_succeeded and self._model is not None:
-            try:
-                import torch
-                ctx = torch.no_grad()
-            except Exception:
-                from contextlib import nullcontext
-                ctx = nullcontext()
+        if not onnx_succeeded:
+            self._load_pytorch_model()
+            if self._model is not None:
+                try:
+                    import torch
+                    ctx = torch.no_grad()
+                except Exception:
+                    from contextlib import nullcontext
+                    ctx = nullcontext()
 
-            with ctx:
-                for imgsz in [640]:
-                    try:
-                        results = self._model.predict(
-                            source=source,
-                            imgsz=imgsz,
-                            conf=_MODEL_CONF,
-                            verbose=False,
-                        )
-                        if results:
-                            collected.extend(self._boxes_from_result(results[0], meta=meta))
-                    except Exception as pt_err:
-                        logger.warning("PyTorch predict failed: %s", pt_err)
+                with ctx:
+                    for imgsz in [640]:
+                        try:
+                            results = self._model.predict(
+                                source=source,
+                                imgsz=imgsz,
+                                conf=_MODEL_CONF,
+                                verbose=False,
+                            )
+                            if results:
+                                collected.extend(self._boxes_from_result(results[0], meta=meta))
+                        except Exception as pt_err:
+                            logger.warning("PyTorch predict failed: %s", pt_err)
 
         detections = _nms(collected)
 

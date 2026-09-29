@@ -272,6 +272,7 @@ async def detect(
 
     # ⭐ NEW: Generate patches
     from app.services.patch_service import crop_anomaly_patch
+    swath_array = None
     try:
         swath_array = cv2.imdecode(np.frombuffer(inference_payload, np.uint8), cv2.IMREAD_COLOR)
         if swath_array is not None:
@@ -285,6 +286,11 @@ async def detect(
                     item.mask_url = mask_url
     except Exception as e:
         logger.warning("Failed to generate patches: %s", e)
+    finally:
+        if swath_array is not None:
+            del swath_array
+        import gc
+        gc.collect()
 
     summary = normalizer._build_summary(detections)
 
