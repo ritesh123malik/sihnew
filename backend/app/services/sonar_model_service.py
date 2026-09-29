@@ -202,12 +202,18 @@ class SonarModelService(ModelService):
             model_layers = list(self._model.model.model)
             hook_index = 9
 
-            # Look for SPPF layer in backbone or C2f/C3k2/C2PSA/WERBBlock
+            # Prioritize SPPF layer in backbone (layer 9 in YOLO11 / YOLOv8)
+            sppf_found = False
             for i, layer in enumerate(model_layers):
-                layer_name = layer.__class__.__name__
-                if "SPPF" in layer_name or any(k in layer_name for k in ("C2f", "C3k2", "C2PSA", "Bottleneck", "WERBBlock")):
+                if "SPPF" in layer.__class__.__name__:
                     hook_index = i
+                    sppf_found = True
                     break
+            if not sppf_found:
+                for i, layer in enumerate(model_layers):
+                    if any(k in layer.__class__.__name__ for k in ("C2f", "C3k2", "C2PSA", "WERBBlock")):
+                        hook_index = i
+
 
 
             def _make_hook(name):
