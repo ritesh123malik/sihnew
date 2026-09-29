@@ -627,7 +627,7 @@ class SonarModelService(ModelService):
 
     def metadata(self) -> ModelMetadata:
         return ModelMetadata(
-            name="sih2026-yolov8s-marine-debris",
+            name="sih2026-yolo11s-sonar-detection",
             version="colab-best",
             provider="sonar",
         )

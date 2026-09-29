@@ -52,7 +52,7 @@ def test_sonar_model_service_predict():
 
     svc.load()
     assert svc.is_loaded is True
-    assert svc.metadata().name == "sih2026-yolov8s-marine-debris"
+    assert svc.metadata().name == "sih2026-yolo11s-sonar-detection"
 
     # Test predict with bytes
     img = Image.new("RGB", (64, 64), color="gray")
