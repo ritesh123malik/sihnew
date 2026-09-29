@@ -1,18 +1,19 @@
 import styles from './DetectionSettings.module.css'
 
 export const SONAR_CLASSES = [
-  'Ghost Net',
   'Shipwreck',
-  'Submarine Pipeline',
-  'Mine / Munitions',
   'Aircraft',
+  'Submarine Pipeline',
+  'Ghost Net',
+  'Mine / Munitions',
   'Geology / Rocks',
   'Debris',
   'Other'
 ]
 const CLASSES = SONAR_CLASSES
 
-export default function DetectionSettings({ value, onChange }) {
+
+export default function DetectionSettings({ value, onChange, onConfidenceChange }) {
   const { confidence, selected } = value
 
   function toggleClass(name) {
@@ -20,6 +21,14 @@ export default function DetectionSettings({ value, onChange }) {
       ? selected.filter((n) => n !== name)
       : [...selected, name]
     onChange({ ...value, selected: next })
+  }
+
+  function handleConfidenceChange(e) {
+    const val = Number(e.target.value)
+    if (onConfidenceChange) {
+      onConfidenceChange(val)
+    }
+    onChange({ ...value, confidence: val })
   }
 
   const pct = ((confidence - 15) / 80) * 100
@@ -40,7 +49,7 @@ export default function DetectionSettings({ value, onChange }) {
             min={15}
             max={95}
             value={confidence}
-            onChange={(e) => onChange({ ...value, confidence: Number(e.target.value) })}
+            onChange={handleConfidenceChange}
             className={styles.slider}
             aria-label="Confidence threshold"
           />

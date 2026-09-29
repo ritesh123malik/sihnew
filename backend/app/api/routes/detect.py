@@ -1,5 +1,7 @@
+import csv
 import logging
 import math
+from pathlib import Path
 import uuid
 from datetime import datetime, timezone
 
@@ -7,6 +9,54 @@ import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+_BACKEND_DIR = Path(__file__).resolve().parents[3]
+_REPO_ROOT = _BACKEND_DIR.parent if _BACKEND_DIR.name == "backend" else _BACKEND_DIR
+_PER_CLASS_THRESHOLDS_CSV = _REPO_ROOT / "model" / "per_class_thresholds.csv"
+_CACHED_PER_CLASS_THRESHOLDS: dict[str, float] | None = None
+_DEFAULT_UNKNOWN_THRESHOLD = 0.50
+
+
+def _normalize_class_label(label: str) -> str:
+    cleaned = label.strip().lower().replace(" ", "_").replace("-", "_").replace("/", "_")
+    while "__" in cleaned:
+        cleaned = cleaned.replace("__", "_")
+    return cleaned.strip("_")
+
+
+def _get_per_class_thresholds() -> dict[str, float]:
+    global _CACHED_PER_CLASS_THRESHOLDS
+    if _CACHED_PER_CLASS_THRESHOLDS is not None:
+        return _CACHED_PER_CLASS_THRESHOLDS
+
+    thresholds: dict[str, float] = {}
+    csv_path = _PER_CLASS_THRESHOLDS_CSV
+    if not csv_path.is_file():
+        alt_path = _BACKEND_DIR / "model" / "per_class_thresholds.csv"
+        if alt_path.is_file():
+            csv_path = alt_path
+
+    if csv_path.is_file():
+        try:
+            with open(csv_path, mode="r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                header = next(reader, None)
+                for row in reader:
+                    if len(row) >= 2:
+                        raw_cls = row[0].strip()
+                        if raw_cls.lower() in ("cls", "class"):
+                            continue
+                        cls_name = _normalize_class_label(raw_cls)
+                        try:
+                            val = float(row[1])
+                            thresholds[cls_name] = val
+                        except ValueError:
+                            continue
+        except Exception as exc:
+            logger.warning("Failed to read per-class thresholds CSV at %s: %s", csv_path, exc)
+
+    _CACHED_PER_CLASS_THRESHOLDS = thresholds
+    return _CACHED_PER_CLASS_THRESHOLDS
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
@@ -75,7 +125,7 @@ async def detect(
     resolution: str = Form(default="0.1 m/px"),
     depth_min: float = Form(default=10.0),
     depth_max: float = Form(default=50.0),
-    confidence_threshold: int = Form(default=50),
+    confidence_threshold: int | None = Form(default=None),
     selected_classes: str = Form(default=""),
     min_object_size: int = Form(default=10),
     db: Session = Depends(get_db),
@@ -171,49 +221,19 @@ async def detect(
             run_repo.update(run.id, status="failed", error_message="XTF parsing failed")
             raise InvalidFileTypeError("Corrupt or invalid Triton XTF file")
 
-    prediction_result = None
-    if is_xtf and "waterfall_np" in locals() and waterfall_np is not None and waterfall_np.shape[0] > 700:
-        try:
-            from app.preprocessing.waterfall_tiler import WaterfallTiler
-            from app.schemas.ml import PredictionResult
-            tiler = WaterfallTiler(tile_height=640, tile_width=640, overlap=0.20)
-            tiles = tiler.slice_waterfall(waterfall_np)
-            accumulated_dets = []
-            scores = {}
-            for tile_np, start_y, end_y in tiles:
-                tile_success, tile_png = cv2.imencode(".png", tile_np)
-                if tile_success:
-                    tile_res = inference_service.predict(tile_png.tobytes())
-                    if tile_res.detections:
-                        proj_dets = tiler.project_detections_to_global(
-                            tile_res.detections,
-                            start_ping=start_y,
-                            orig_width=waterfall_np.shape[1],
-                            tile_width=tile_np.shape[1],
-                        )
-                        accumulated_dets.extend(proj_dets)
-                    for k, v in tile_res.raw_scores.items():
-                        scores[k] = max(scores.get(k, 0.0), v)
-
-            merged_dets = WaterfallTiler.apply_global_seam_nms(accumulated_dets, iou_threshold=0.45)
-            best_label = max(merged_dets, key=lambda d: d.confidence).class_label if merged_dets else "no_detection"
-            best_conf = max(merged_dets, key=lambda d: d.confidence).confidence if merged_dets else 0.0
-            prediction_result = PredictionResult(
-                label=best_label,
-                confidence=best_conf,
-                raw_scores=scores,
-                detections=merged_dets,
+    try:
+        if is_xtf:
+            from app.services.waterfall_tiling import infer_waterfall_tiled
+            prediction_result = infer_waterfall_tiled(
+                waterfall_np=waterfall_np,
+                inference_service=inference_service,
             )
-        except Exception as e:
-            logger.warning("Tiled inference fallback to standard: %s", e)
-            prediction_result = None
-
-    if prediction_result is None:
-        try:
+        else:
             prediction_result = inference_service.predict(inference_payload)
-        except Exception:
-            run_repo.update(run.id, status="failed", error_message="Inference failed")
-            raise InferenceFailedError()
+    except Exception:
+        run_repo.update(run.id, status="failed", error_message="Inference failed")
+        raise InferenceFailedError()
+
 
     normalizer = ResultNormalizer()
     detections, summary = normalizer.normalize(prediction_result)
@@ -361,6 +381,19 @@ async def detect(
 
 
 
+CANONICAL_MODEL_CLASSES = {
+    "shipwreck",
+    "aircraft",
+    "submarine_pipeline",
+    "ghost_net",
+    "mine_munitions",
+}
+
+_LEGACY_CLASS_MAP = {
+    "debris": {"ghost_net", "submarine_pipeline", "debris"},
+    "rocks": set(),
+}
+
 _CLASS_GROUPS = {
     "debris": {
         "debris",
@@ -391,42 +424,64 @@ _CLASS_GROUPS = {
 }
 
 
+
 def _label_matches(label: str, selected: list[str]) -> bool:
     if not selected:
         return True
-    lowered = label.lower()
-    allow_other = any(s.lower() == "other" for s in selected)
-    matched_group = False
-    for name in selected:
-        key = name.lower()
-        group = _CLASS_GROUPS.get(key)
-        if group is None:
-            if key in lowered or lowered in key:
-                return True
+
+    norm_label = _normalize_class_label(label)
+
+    allowed: set[str] = set()
+    allow_other = False
+
+    for item in selected:
+        raw = item.strip()
+        if not raw:
             continue
-        if any(token in lowered for token in group):
-            return True
-        matched_group = True
-    if allow_other and not any(
-        token in lowered for tokens in _CLASS_GROUPS.values() for token in tokens
-    ):
+        norm_item = _normalize_class_label(raw)
+        if norm_item in CANONICAL_MODEL_CLASSES:
+            allowed.add(norm_item)
+        elif norm_item in _LEGACY_CLASS_MAP:
+            allowed.update(_LEGACY_CLASS_MAP[norm_item])
+        elif norm_item == "other":
+            allow_other = True
+        else:
+            allowed.add(norm_item)
+
+    if norm_label in allowed:
         return True
-    return False if matched_group or allow_other else True
+
+    if allow_other and norm_label not in CANONICAL_MODEL_CLASSES:
+        return True
+
+    return False
 
 
 def _apply_detection_filters(
     detections: list[DetectionItem],
-    confidence_threshold: int,
+    confidence_threshold: int | None,
     selected_classes: str,
     min_object_size: int,
     normalizer: ResultNormalizer,
 ) -> tuple[list[DetectionItem], DetectionSummary]:
-    threshold = max(0, min(int(confidence_threshold), 100))
+    per_class_map = None
+    if confidence_threshold is None:
+        per_class_map = _get_per_class_thresholds()
+    else:
+        threshold = max(0, min(int(confidence_threshold), 100))
+
     classes = [c.strip() for c in selected_classes.split(",") if c.strip()]
     filtered: list[DetectionItem] = []
     for item in detections:
-        if round(item.confidence * 100) < threshold:
-            continue
+        if confidence_threshold is not None:
+            if round(item.confidence * 100) < threshold:
+                continue
+        else:
+            norm_cls = _normalize_class_label(item.class_label)
+            class_threshold = per_class_map.get(norm_cls, _DEFAULT_UNKNOWN_THRESHOLD) if per_class_map else _DEFAULT_UNKNOWN_THRESHOLD
+            if item.confidence < class_threshold:
+                continue
+
         if not _label_matches(item.class_label, classes):
             continue
         size = 0.0
@@ -449,7 +504,7 @@ async def detect_xtf(
     resolution: str = Form(default="1024x768"),
     depth_min: float = Form(default=0.0),
     depth_max: float = Form(default=30.0),
-    confidence_threshold: int = Form(default=25),
+    confidence_threshold: int | None = Form(default=None),
     selected_classes: str = Form(default=""),
     min_object_size: int = Form(default=5),
     db: Session = Depends(get_db),

@@ -41,8 +41,10 @@ export default function Launch() {
   const [previewUrl, setPreviewUrl] = useState('')
   const [settings, setSettings] = useState({
     confidence: 20,
-    selected: ['Ghost Net', 'Shipwreck', 'Submarine Pipeline', 'Mine / Munitions', 'Aircraft', 'Geology / Rocks', 'Debris', 'Other'],
+    selected: ['Shipwreck', 'Aircraft', 'Submarine Pipeline', 'Ghost Net', 'Mine / Munitions', 'Geology / Rocks', 'Debris', 'Other'],
+
   })
+  const [confidenceTouched, setConfidenceTouched] = useState(false)
   const [pipeline, setPipeline] = useState('idle')
   const [error, setError] = useState('')
   const [health, setHealth] = useState(null)
@@ -122,14 +124,16 @@ export default function Launch() {
       formData.append('resolution', DEFAULT_METADATA.resolution)
       formData.append('depth_min', String(depthMin))
       formData.append('depth_max', String(depthMax))
-      formData.append('confidence_threshold', String(settings.confidence))
+      if (confidenceTouched) {
+        formData.append('confidence_threshold', String(settings.confidence))
+      }
       formData.append('selected_classes', settings.selected.join(','))
       formData.append('min_object_size', '10')
 
       const result = await detectScan(formData)
       rememberScan(result.run_id)
       setPipeline('done')
-      navigate(`/results/${result.run_id}?threshold=${settings.confidence}`)
+      navigate(`/results/${result.run_id}${confidenceTouched ? `?threshold=${settings.confidence}` : ''}`)
     } catch (err) {
       if (instanceOnly) {
         localStorage.removeItem(LAST_SCAN_KEY)
@@ -146,7 +150,11 @@ export default function Launch() {
       <main className={styles.workSurface}>
         {error ? <div className={styles.errorBanner}>{error}</div> : null}
         <UploadPanel file={file} previewUrl={previewUrl} onFile={setFile} />
-        <DetectionSettings value={settings} onChange={setSettings} />
+        <DetectionSettings
+          value={settings}
+          onChange={setSettings}
+          onConfidenceChange={() => setConfidenceTouched(true)}
+        />
         <LaunchBar
           ready={Boolean(file) && health?.status === 'ok'}
           running={pipeline === 'running'}
