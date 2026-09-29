@@ -62,11 +62,17 @@ class SonarPreprocessor(Preprocessor):
 
         try:
             # Step 1: Decode raw image bytes into RGB NumPy array
+            import cv2
             from app.services.safe_image_loader import safe_load_image
 
             image_np = safe_load_image(raw_image_bytes)
+            h, w = image_np.shape[:2]
+            if max(h, w) > 1280:
+                scale = 1280.0 / float(max(h, w))
+                image_np = cv2.resize(image_np, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
             # Step 2: SSS-specific corrections (BAC, 2D-FFT stripe filter, homomorphic)
+
             if self.apply_sss_processing:
                 image_np = self.sidescan_processor.process(image_np)
 
