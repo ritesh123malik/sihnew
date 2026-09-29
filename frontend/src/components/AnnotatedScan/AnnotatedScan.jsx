@@ -13,17 +13,26 @@ const RISK_COLOR = {
 
 function scaledBox(bbox, imgW, imgH) {
   if (!bbox || !imgW || !imgH) return null
-  const fits =
-    bbox.x + bbox.width <= imgW + 1 &&
-    bbox.y + bbox.height <= imgH + 1
-  const sx = fits ? 1 : imgW / MODEL_W
-  const sy = fits ? 1 : imgH / MODEL_H
-  return {
-    x: bbox.x * sx,
-    y: bbox.y * sy,
-    width: bbox.width * sx,
-    height: bbox.height * sy,
+  let x = Number(bbox.x) || 0
+  let y = Number(bbox.y) || 0
+  let width = Number(bbox.width) || 0
+  let height = Number(bbox.height) || 0
+
+  // If bounding box was returned in normalized [0, 1] space:
+  if (x <= 1.0 && y <= 1.0 && width <= 1.0 && height <= 1.0 && imgW > 10) {
+    x *= imgW
+    y *= imgH
+    width *= imgW
+    height *= imgH
   }
+
+  // Ensure within image bounds
+  x = Math.max(0, Math.min(imgW, x))
+  y = Math.max(0, Math.min(imgH, y))
+  width = Math.max(0, Math.min(imgW - x, width))
+  height = Math.max(0, Math.min(imgH - y, height))
+
+  return { x, y, width, height }
 }
 
 export default function AnnotatedScan({

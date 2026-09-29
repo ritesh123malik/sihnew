@@ -100,7 +100,7 @@ class YOLOPreprocessor:
         new_h = int(round(h * scale))
 
         # Resize
-        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
         # Symmetrical padding
         pad_w = target_w - new_w
@@ -118,7 +118,7 @@ class YOLOPreprocessor:
             pad_left,
             pad_right,
             cv2.BORDER_CONSTANT,
-            value=(0, 0, 0),
+            value=(114, 114, 114),
         )
 
         meta = LetterboxMeta(

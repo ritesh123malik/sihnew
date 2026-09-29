@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     sss_enable_bac: bool = True
     sss_enable_stripe_filter: bool = True
     sss_enable_sharpening: bool = True
-    sss_enable_shadow_inpainting: bool = True
+    sss_enable_shadow_inpainting: bool = False
     sss_shadow_threshold: float = 0.15
     sss_shadow_inpaint_method: str = "telea"
     yolo_target_size: tuple[int, int] = (800, 800)

@@ -66,9 +66,9 @@ class SonarPreprocessor(Preprocessor):
             from app.services.safe_image_loader import safe_load_image
 
             image_np = safe_load_image(raw_image_bytes)
+            clean_image_np = image_np.copy()
 
             # Step 2: SSS-specific corrections (BAC, 2D-FFT stripe filter, homomorphic)
-
             if self.apply_sss_processing:
                 image_np = self.sidescan_processor.process(image_np)
 
@@ -79,7 +79,7 @@ class SonarPreprocessor(Preprocessor):
                     image_np = self.shadow_inpainter.inpaint(image_np, shadow_mask)
 
             # Step 4: YOLOv8 letterbox resizing, normalization & CHW tensor formatting
-            processed_tensor, meta = self.yolo_preprocessor.process_with_meta(image_np)
+            processed_tensor, meta = self.yolo_preprocessor.process_with_meta(clean_image_np)
 
             return PreprocessedInput(
                 data=processed_tensor,
