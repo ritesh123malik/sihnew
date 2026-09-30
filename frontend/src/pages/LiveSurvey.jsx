@@ -20,6 +20,7 @@ export default function LiveSurvey() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState('info');
   const [selectedAnomaly, setSelectedAnomaly] = useState(null);
+  const [uploadedImage, setUploadedImage] = useState(null);
   const [liveDetections, setLiveDetections] = useState([
     {
       id: 'live-ping-04',
@@ -47,6 +48,16 @@ export default function LiveSurvey() {
     const file = e.target.files[0];
     if (!file) return;
 
+    let localUrl = null;
+    if (file.type.startsWith('image/') || /\.(png|jpe?g|tif|tiff|bmp|webp)$/i.test(file.name)) {
+      localUrl = URL.createObjectURL(file);
+      setUploadedImage({
+        url: localUrl,
+        name: file.name,
+        detections: [],
+      });
+    }
+
     setIsProcessing(true);
     setUploadProgress(10);
     setToastType('info');
@@ -73,7 +84,6 @@ export default function LiveSurvey() {
         body: formData,
       });
 
-
       clearInterval(interval);
       setUploadProgress(100);
 
@@ -88,24 +98,37 @@ export default function LiveSurvey() {
           setLiveDetections((prev) => [...newDets, ...prev]);
         }
 
+        const isXtf = file.name.endsWith('.xtf');
+        const finalUrl = (isXtf && data.waterfall_url)
+          ? `${API_BASE}${data.waterfall_url}`
+          : (localUrl || (data.run_id ? `${API_BASE}/api/runs/${data.run_id}/file` : null));
+
+        setUploadedImage({
+          url: finalUrl,
+          name: file.name,
+          detections: newDets,
+          runId: data.run_id,
+        });
+
         setToastType(count > 0 ? 'success' : 'info');
         setToastMsg(
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ color: '#1a1a1a', fontSize: '13px' }}>
               {count > 0 ? '🎯' : 'ℹ️'} <strong>{file.name}</strong>: {count} target{count === 1 ? '' : 's'} identified.
             </span>
             {data.run_id && (
               <button
                 onClick={() => navigate(`/results/${data.run_id}`)}
                 style={{
-                  padding: '4px 10px',
-                  backgroundColor: count > 0 ? '#22c55e' : 'var(--gesso-primary, #2e3700)',
-                  color: count > 0 ? '#000000' : '#ffffff',
-                  borderRadius: '4px',
+                  padding: '5px 12px',
+                  backgroundColor: 'var(--gesso-primary, #2e3700)',
+                  color: '#ffffff',
+                  borderRadius: '6px',
                   border: 'none',
-                  fontWeight: 700,
+                  fontWeight: 600,
                   cursor: 'pointer',
                   fontSize: '12px',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
                 }}
               >
                 View Mission Report →
@@ -114,14 +137,14 @@ export default function LiveSurvey() {
             <button
               onClick={() => navigate('/reports')}
               style={{
-                padding: '4px 8px',
-                backgroundColor: 'rgba(255,255,255,0.15)',
-                color: '#ffffff',
-                borderRadius: '4px',
-                border: '1px solid rgba(255,255,255,0.25)',
+                padding: '5px 10px',
+                backgroundColor: '#f4f2f6',
+                color: '#1a1a1a',
+                borderRadius: '6px',
+                border: '1px solid rgba(0, 0, 0, 0.15)',
                 fontWeight: 600,
                 cursor: 'pointer',
-                fontSize: '11px',
+                fontSize: '12px',
               }}
             >
               All Reports 📋
@@ -143,6 +166,7 @@ export default function LiveSurvey() {
       }, 1500);
     }
   };
+
 
   return (
     <>
@@ -215,14 +239,28 @@ export default function LiveSurvey() {
         <div className="grid-2col">
           <div className="card-panel" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
-                Active Towfish Acoustic Waterfall
-              </h3>
-              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#16a34a', fontWeight: 700 }}>
-                ● 30 Hz Ping Rate
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>
+                  Active Towfish Acoustic Waterfall
+                </h3>
+                {uploadedImage && (
+                  <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#15803d', fontWeight: 600, border: '1px solid rgba(34, 197, 94, 0.25)' }}>
+                    Payload Loaded
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: '11px', fontFamily: 'monospace', color: uploadedImage ? '#0284c7' : '#16a34a', fontWeight: 700 }}>
+                {uploadedImage ? `● ${uploadedImage.name}` : '● 30 Hz Ping Rate'}
               </span>
             </div>
-            <WaterfallCanvas width={720} height={420} />
+            <WaterfallCanvas
+              width={720}
+              height={420}
+              imageUrl={uploadedImage?.url}
+              fileName={uploadedImage?.name}
+              detections={uploadedImage?.detections || []}
+              onResetStream={() => setUploadedImage(null)}
+            />
           </div>
 
           <div className="card-panel" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
