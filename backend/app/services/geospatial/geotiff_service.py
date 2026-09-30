@@ -30,12 +30,20 @@ except ImportError:
 # ⭐ Output directory for GeoTIFF files
 GEOTIFF_OUTPUT_DIR = Path("backend/export/geotiff")
 
-from backend.app.services.geospatial.geodesy import (
-    GeodeticCoordinate,
-    SonarPing,
-    WGS84Geodesy,
-    geodesy_engine,
-)
+try:
+    from app.services.geospatial.geodesy import (
+        GeodeticCoordinate,
+        SonarPing,
+        WGS84Geodesy,
+        geodesy_engine,
+    )
+except ImportError:
+    from backend.app.services.geospatial.geodesy import (
+        GeodeticCoordinate,
+        SonarPing,
+        WGS84Geodesy,
+        geodesy_engine,
+    )
 
 logger = logging.getLogger("sonar_geotiff")
 

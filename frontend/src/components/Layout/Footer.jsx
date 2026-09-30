@@ -15,7 +15,7 @@ export default function Footer() {
       }}
     >
       <div>
-        <strong>SONAR SENTRY</strong> · Acoustic Physics Gap Analysis Platform · SIH 2026 Grand Finale
+        <strong>SONARIS</strong> · Acoustic Physics Gap Analysis Platform · SIH 2026 Grand Finale
       </div>
       <div style={{ display: 'flex', gap: '16px' }}>
         <span>Triton XTF Stream Parser</span>

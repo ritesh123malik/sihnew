@@ -1,7 +1,7 @@
 import React from 'react';
 import WebSocketStatus from '../common/WebSocketStatus';
 
-export default function Header({ title = 'Sonar Sentry', subtitle = '' }) {
+export default function Header({ title = 'SONARIS', subtitle = '' }) {
   return (
     <header
       style={{

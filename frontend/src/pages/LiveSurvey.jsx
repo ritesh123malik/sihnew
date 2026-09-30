@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Topbar from '../components/Topbar/Topbar';
 import Footer from '../components/Layout/Footer';
 import WaterfallCanvas from '../components/Waterfall/WaterfallCanvas';
@@ -12,6 +13,7 @@ import '../App.css';
 
 
 export default function LiveSurvey() {
+  const navigate = useNavigate();
   const [wsStatus, setWsStatus] = useState('connected');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -75,10 +77,54 @@ export default function LiveSurvey() {
 
       if (res.ok) {
         const data = await res.json();
-        setToastMsg(`Processed successfully! ${data.detections ? data.detections.length : 0} targets detected.`);
-        if (data.detections && data.detections.length > 0) {
-          setLiveDetections((prev) => [...data.detections, ...prev]);
+        const count = data.detections ? data.detections.length : 0;
+        const newDets = (data.detections || []).map((d) => ({
+          ...d,
+          id: d.detection_id || d.id || `det-${Math.random().toString(36).slice(2, 7)}`,
+        }));
+        if (newDets.length > 0) {
+          setLiveDetections((prev) => [...newDets, ...prev]);
         }
+
+        setToastMsg(
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span>
+              {count > 0 ? '🎯' : 'ℹ️'} <strong>{file.name}</strong>: {count} target{count === 1 ? '' : 's'} identified.
+            </span>
+            {data.run_id && (
+              <button
+                onClick={() => navigate(`/results/${data.run_id}`)}
+                style={{
+                  padding: '4px 10px',
+                  backgroundColor: count > 0 ? '#22c55e' : 'var(--gesso-primary, #2e3700)',
+                  color: count > 0 ? '#000000' : '#ffffff',
+                  borderRadius: '4px',
+                  border: 'none',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                }}
+              >
+                View Mission Report →
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/reports')}
+              style={{
+                padding: '4px 8px',
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                color: '#ffffff',
+                borderRadius: '4px',
+                border: '1px solid rgba(255,255,255,0.25)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontSize: '11px',
+              }}
+            >
+              All Reports 📋
+            </button>
+          </div>
+        );
       } else {
         setToastMsg('File uploaded and queued for acoustic pipeline analysis.');
       }
@@ -108,6 +154,24 @@ export default function LiveSurvey() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={() => navigate('/reports')}
+              style={{
+                padding: '8px 14px',
+                backgroundColor: 'transparent',
+                color: 'var(--gesso-fg, #1e293b)',
+                border: '1px solid var(--gesso-divider, rgba(0,0,0,0.15))',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <span>📊</span> View All Reports
+            </button>
             <label
               style={{
                 padding: '8px 16px',

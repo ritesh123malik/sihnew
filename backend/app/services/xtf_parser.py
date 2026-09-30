@@ -125,19 +125,53 @@ def parse_xtf_bytes(data: bytes) -> tuple[np.ndarray, dict[str, Any]]:
                 stbd_samples = struct.unpack_from("<I", data, chan1_offset + 36)[0]
                 stbd_slant_range = struct.unpack_from("<f", data, chan1_offset + 12)[0]
 
+                # Determine bytes per sample (8-bit uint8 vs 16-bit uint16)
+                total_sample_bytes = num_bytes_record - 256 - (64 * 2)
+                expected_samples = port_samples + stbd_samples
+                bytes_per_sample = 2 if (expected_samples > 0 and total_sample_bytes >= expected_samples * 2) else 1
+
                 # Extract acoustic samples
                 data_offset = ping_hdr_offset + 256 + (64 * 2)
-                p_data = np.frombuffer(
-                    data[data_offset : data_offset + port_samples], dtype=np.uint8
-                )
-                s_data = np.frombuffer(
-                    data[data_offset + port_samples : data_offset + port_samples + stbd_samples],
-                    dtype=np.uint8,
-                )
+                if bytes_per_sample == 2:
+                    p_bytes = port_samples * 2
+                    s_bytes = stbd_samples * 2
+                    p_raw = np.frombuffer(data[data_offset : data_offset + p_bytes], dtype=np.uint16)
+                    s_raw = np.frombuffer(data[data_offset + p_bytes : data_offset + p_bytes + s_bytes], dtype=np.uint16)
+
+                    if len(p_raw) == port_samples and len(s_raw) == stbd_samples:
+                        # CARIS / GeoSwath radiometric normalization: 1st - 99th percentile contrast stretch to 8-bit
+                        combined = np.concatenate([p_raw, s_raw])
+                        p_low, p_high = np.percentile(combined, (1.0, 99.0))
+                        denom = max(1.0, float(p_high - p_low))
+                        p_data = np.clip((p_raw.astype(np.float32) - p_low) / denom * 255.0, 0, 255).astype(np.uint8)
+                        s_data = np.clip((s_raw.astype(np.float32) - p_low) / denom * 255.0, 0, 255).astype(np.uint8)
+                    else:
+                        p_data = np.zeros(0, dtype=np.uint8)
+                        s_data = np.zeros(0, dtype=np.uint8)
+                else:
+                    p_data = np.frombuffer(
+                        data[data_offset : data_offset + port_samples], dtype=np.uint8
+                    )
+                    s_data = np.frombuffer(
+                        data[data_offset + port_samples : data_offset + port_samples + stbd_samples],
+                        dtype=np.uint8,
+                    )
 
                 if len(p_data) == port_samples and len(s_data) == stbd_samples:
                     port_pings.append(p_data)
                     stbd_pings.append(s_data)
+
+                    # Geodesy check: if coordinates are in UTM Zone 18N meters (e.g., Easting/Northing > 90/180)
+                    lat_val = raw_y
+                    lon_val = raw_x
+                    if abs(lat_val) > 90.0 or abs(lon_val) > 180.0:
+                        easting, northing = lon_val, lat_val
+                        # Hudson River approximate projection anchor for UTM 18N (EPSG:26918)
+                        approx_lat = northing / 111320.0 - 0.5
+                        if 40.0 <= approx_lat <= 45.0:
+                            lat_val = approx_lat
+                            lon_val = -75.0 + (easting - 500000.0) / (111320.0 * math.cos(math.radians(approx_lat)))
+
                     telemetry.append(
                         XtfPingTelemetry(
                             ping_number=ping_num,
@@ -152,8 +186,8 @@ def parse_xtf_bytes(data: bytes) -> tuple[np.ndarray, dict[str, Any]]:
                             sensor_heading_deg=heading,
                             sensor_pitch_deg=pitch,
                             sensor_roll_deg=roll,
-                            latitude=raw_y,
-                            longitude=raw_x,
+                            latitude=lat_val,
+                            longitude=lon_val,
                             slant_range_m=max(port_slant_range, stbd_slant_range),
                             num_samples_port=port_samples,
                             num_samples_stbd=stbd_samples,
@@ -317,3 +351,15 @@ def create_synthetic_xtf(
         buf.write(stbd_samples.tobytes())
 
     return buf.getvalue()
+
+
+def parse_xtf_file(path: str) -> tuple[np.ndarray, dict[str, Any]]:
+    """Parse raw bytes of an XTF file from disk path."""
+    with open(path, "rb") as f:
+        return parse_xtf_bytes(f.read())
+
+
+# Type aliases for backward compatibility with XtfService
+XTFPing = XtfPingTelemetry
+XTFPingHeader = XtfPingTelemetry
+

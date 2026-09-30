@@ -31,6 +31,27 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
 
+    # Automatically ensure SQLite tables have newly added columns
+    if settings.database_url.startswith("sqlite"):
+        try:
+            with engine.connect() as conn:
+                from sqlalchemy import text
+                cursor = conn.connection.cursor()
+                cursor.execute("PRAGMA table_info(detections)")
+                cols = {r[1] for r in cursor.fetchall()}
+                if cols:
+                    if "image_url" not in cols:
+                        cursor.execute("ALTER TABLE detections ADD COLUMN image_url VARCHAR(512)")
+                    if "mask_url" not in cols:
+                        cursor.execute("ALTER TABLE detections ADD COLUMN mask_url VARCHAR(512)")
+                    if "sadh_height_m" not in cols:
+                        cursor.execute("ALTER TABLE detections ADD COLUMN sadh_height_m FLOAT")
+                    if "physics_confidence" not in cols:
+                        cursor.execute("ALTER TABLE detections ADD COLUMN physics_confidence FLOAT")
+                    conn.connection.commit()
+        except Exception:
+            pass
+
 
 def get_session() -> Session:
     if SessionLocal is None:

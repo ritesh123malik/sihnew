@@ -69,7 +69,7 @@ async def websocket_waterfall(websocket: WebSocket) -> None:
         {
             "type": "status",
             "status": "connected",
-            "message": "Connected to Sonar Sentry Live Acoustic Stream",
+            "message": "Connected to SONARIS Live Acoustic Stream",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )

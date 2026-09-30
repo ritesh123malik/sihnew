@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     application = FastAPI(
-        title="Sonar Sentry API",
+        title="SONARIS API",
         description="Backend for the sonar anomaly detection web application.",
         version=settings.model_version,
         lifespan=lifespan,

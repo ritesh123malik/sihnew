@@ -3,10 +3,8 @@ import styles from './Topbar.module.css'
 
 const NAV_ITEMS = [
   { key: 'launch', label: 'Launch', to: '/' },
-  { key: 'dashboard', label: 'Dashboard', to: '/dashboard' },
   { key: 'live-survey', label: 'Live Survey', to: '/live-survey' },
   { key: 'map', label: 'Map', to: '/map' },
-  { key: 'anomalies', label: 'Anomalies', to: '/anomalies' },
   { key: 'reports', label: 'Reports', to: '/reports' },
   { key: 'uploads', label: 'Uploads', to: '/uploads' },
 ]
@@ -18,7 +16,7 @@ export default function Topbar({ activePage = 'launch' }) {
         <div className={styles.topbar__mark}>S</div>
         <div className={styles.topbar__text}>
           <span className={styles.topbar__label}>MoES · NIOT</span>
-          <span className={styles.topbar__name}>SONAR SENTRY</span>
+          <span className={styles.topbar__name}>SONARIS</span>
         </div>
       </div>
 

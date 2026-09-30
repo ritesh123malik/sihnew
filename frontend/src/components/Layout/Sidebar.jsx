@@ -3,10 +3,9 @@ import { NavLink } from 'react-router-dom';
 import './Sidebar.css';
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Main Dashboard', icon: '📊' },
+  { path: '/', label: 'Launch', icon: '🚀' },
   { path: '/live-survey', label: 'Live Survey', icon: '📡' },
   { path: '/map', label: 'Swath Map', icon: '🗺️' },
-  { path: '/anomalies', label: 'Anomaly Inspector', icon: '🔍' },
   { path: '/reports', label: 'Reports & Export', icon: '📑' },
 ];
 
@@ -14,9 +13,9 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar__header">
-        <div className="sidebar__logo-badge">SS</div>
+        <div className="sidebar__logo-badge">S</div>
         <div className="sidebar__brand-text">
-          <h2>SONAR SENTRY</h2>
+          <h2>SONARIS</h2>
           <p>SIH 2026 · NIOT / MoES</p>
         </div>
       </div>

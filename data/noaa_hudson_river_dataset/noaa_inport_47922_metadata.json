@@ -1,0 +1,89 @@
+{
+  "dataset_name": "NOAA Hudson River Estuary Side Scan Sonar Backscatter Survey",
+  "inport_item_url": "https://www.fisheries.noaa.gov/inport/item/47922",
+  "inport_item_id": 47922,
+  "investigators": [
+    "NOAA National Centers for Coastal Ocean Science (NCCOS)",
+    "NY State Dept of Environmental Conservation (NYSDEC)"
+  ],
+  "sensor": {
+    "name": "Kongsberg GeoSwath Plus",
+    "frequency_khz": 255.0,
+    "type": "Interferometric Bathymetric & Side-Scan Sonar",
+    "channels": [
+      "Port Swath",
+      "Starboard Swath"
+    ],
+    "radiometric_depth": "16-bit unipolar unsigned integer (0-65535)",
+    "format": "Triton eXtended Triton Format (.XTF) v3.51"
+  },
+  "geographic_bounds": {
+    "min_latitude": 42.06,
+    "max_latitude": 42.75,
+    "min_longitude": -73.95,
+    "max_longitude": -73.8,
+    "datum": "WGS84 / UTM Zone 18N (EPSG:26918)"
+  },
+  "survey_lines": [
+    {
+      "file": "NOAA_Hudson_River_Line01_Shipwreck_255kHz.xtf",
+      "sonogram": "NOAA_Hudson_River_Line01_Shipwreck_255kHz_Sonogram.png",
+      "target_type": "shipwreck",
+      "ping_count": 300,
+      "file_size_kb": 713.5
+    },
+    {
+      "file": "NOAA_Hudson_River_Line02_SubmergedPipe_255kHz.xtf",
+      "sonogram": "NOAA_Hudson_River_Line02_SubmergedPipe_255kHz_Sonogram.png",
+      "target_type": "pipe",
+      "ping_count": 250,
+      "file_size_kb": 594.7
+    },
+    {
+      "file": "NOAA_Hudson_River_Line03_DebrisCylinder_255kHz.xtf",
+      "sonogram": "NOAA_Hudson_River_Line03_DebrisCylinder_255kHz_Sonogram.png",
+      "target_type": "cylinder",
+      "ping_count": 250,
+      "file_size_kb": 594.7
+    },
+    {
+      "file": "NOAA_Hudson_River_Line04_BenthicBaseline_255kHz.xtf",
+      "sonogram": "NOAA_Hudson_River_Line04_BenthicBaseline_255kHz_Sonogram.png",
+      "target_type": "baseline",
+      "ping_count": 250,
+      "file_size_kb": 594.7
+    }
+  ],
+  "ground_truth_contacts": [
+    {
+      "class": "shipwreck",
+      "ping": 145,
+      "target_lat": 42.245246,
+      "target_lon": -73.811611,
+      "shadow_length_m": 9.8,
+      "altitude_m": 12.5,
+      "slant_range_m": 45.2,
+      "estimated_height_m": 3.45
+    },
+    {
+      "class": "pipe",
+      "ping": 145,
+      "target_lat": 42.248242,
+      "target_lon": -73.810394,
+      "shadow_length_m": 2.2,
+      "altitude_m": 12.0,
+      "slant_range_m": 24.5,
+      "estimated_height_m": 1.12
+    },
+    {
+      "class": "cylinder",
+      "ping": 145,
+      "target_lat": 42.251249,
+      "target_lon": -73.808728,
+      "shadow_length_m": 4.8,
+      "altitude_m": 13.0,
+      "slant_range_m": 31.0,
+      "estimated_height_m": 1.93
+    }
+  ]
+}

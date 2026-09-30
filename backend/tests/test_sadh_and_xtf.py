@@ -68,3 +68,58 @@ class TestXtfParser:
         bad_xtf = b"FAKE_XTF_HEADER" + b"\x00" * 1024
         with pytest.raises(XtfParseError):
             parse_xtf_bytes(bad_xtf)
+
+    def test_noaa_geoswath_16bit_xtf_parsing(self, tmp_path):
+        """Test parsing of 16-bit interferometric sidescan sonar XTF files (NOAA Hudson River / GeoSwath spec)."""
+        import struct
+        import io
+        from app.services.xtf_parser import parse_xtf_file
+
+        samples_per_chan = 128
+        bytes_per_sample = 2
+        pkt_len = 256 + 128 + (samples_per_chan * bytes_per_sample * 2)
+
+        buf = io.BytesIO()
+        hdr = bytearray(1024)
+        hdr[0] = 0x7B
+        hdr[1] = 1
+        hdr[2:10] = b"HSX2Xtf "
+        hdr[18:34] = b"GeoAcoustics    "
+        struct.pack_into("<H", hdr, 142, 2)
+        buf.write(hdr)
+
+        for i in range(16):
+            pkt_hdr = bytearray(256)
+            struct.pack_into("<H", pkt_hdr, 0, 0xFACE)
+            struct.pack_into("<I", pkt_hdr, 4, pkt_len)
+            struct.pack_into("<H", pkt_hdr, 8, 2009)
+            struct.pack_into("<I", pkt_hdr, 16, i + 1)
+            struct.pack_into("<d", pkt_hdr, 80, 42.15)  # Hudson River latitude
+            struct.pack_into("<d", pkt_hdr, 88, -73.85) # Hudson River longitude
+
+            c0_hdr = bytearray(64)
+            struct.pack_into("<I", c0_hdr, 36, samples_per_chan)
+            c1_hdr = bytearray(64)
+            struct.pack_into("<I", c1_hdr, 36, samples_per_chan)
+
+            p_16 = np.random.randint(5000, 30000, size=samples_per_chan, dtype=np.uint16)
+            s_16 = np.random.randint(5000, 30000, size=samples_per_chan, dtype=np.uint16)
+
+            buf.write(pkt_hdr)
+            buf.write(c0_hdr)
+            buf.write(c1_hdr)
+            buf.write(p_16.tobytes())
+            buf.write(s_16.tobytes())
+
+        xtf_path = tmp_path / "hudson_river_16bit.xtf"
+        xtf_path.write_bytes(buf.getvalue())
+
+        waterfall, meta = parse_xtf_file(str(xtf_path))
+        assert waterfall.ndim == 2
+        assert waterfall.dtype == np.uint8
+        assert waterfall.shape[0] == 16
+        assert waterfall.shape[1] == samples_per_chan * 2
+        assert meta["num_pings"] == 16
+        assert abs(meta["avg_latitude"] - 42.15) < 1e-3
+        assert abs(meta["avg_longitude"] - (-73.85)) < 1e-3
+
