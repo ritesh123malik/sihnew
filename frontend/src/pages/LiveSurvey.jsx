@@ -18,6 +18,7 @@ export default function LiveSurvey() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState('info');
   const [selectedAnomaly, setSelectedAnomaly] = useState(null);
   const [liveDetections, setLiveDetections] = useState([
     {
@@ -48,6 +49,7 @@ export default function LiveSurvey() {
 
     setIsProcessing(true);
     setUploadProgress(10);
+    setToastType('info');
     setToastMsg(`Uploading ${file.name} for Triton telemetry ingestion...`);
 
     const interval = setInterval(() => {
@@ -86,6 +88,7 @@ export default function LiveSurvey() {
           setLiveDetections((prev) => [...newDets, ...prev]);
         }
 
+        setToastType(count > 0 ? 'success' : 'info');
         setToastMsg(
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <span>
@@ -126,10 +129,12 @@ export default function LiveSurvey() {
           </div>
         );
       } else {
+        setToastType('warning');
         setToastMsg('File uploaded and queued for acoustic pipeline analysis.');
       }
     } catch (err) {
       clearInterval(interval);
+      setToastType('info');
       setToastMsg('Simulation completed with standard test telemetry.');
     } finally {
       setTimeout(() => {
@@ -239,7 +244,7 @@ export default function LiveSurvey() {
 
       <Footer />
 
-      {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg('')} />}
+      {toastMsg && <Toast message={toastMsg} type={toastType} onClose={() => setToastMsg('')} />}
 
       {selectedAnomaly && (
         <AnomalyModal
