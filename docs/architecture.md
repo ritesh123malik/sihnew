@@ -1,53 +1,57 @@
-# Sonar Sentry — System Architecture & Physics Specifications
+# Sonaris architecture
 
-## 1. System Overview
+[← README](../README.md) · [API](api.md) · [Configuration](configuration.md)
 
-```
- ┌────────────────────────────────────────────────────────────────────────┐
- │                              FRONTEND                                  │
- │   React 18 · Vite · CSS Modules · Real-Time Canvas Waterfall · Leaflet │
- └───────────────────────────────────┬────────────────────────────────────┘
-                                     │ HTTP (REST) / WSS (WebSocket)
-                                     ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │                           FASTAPI BACKEND                              │
- │                                                                        │
- │   ┌──────────────────────┐  ┌────────────────────┐  ┌──────────────┐   │
- │   │ Triton XTF Parser    │  │ SSS DSP Pipeline   │  │ YOLOv8s Head │   │
- │   │ (0xFACE / 0x7B)      │  │ BAC + Stripe + FFT │  │ + SADH Eval  │   │
- │   └──────────┬───────────┘  └─────────┬──────────┘  └──────┬───────┘   │
- │              │                        │                    │           │
- │              ▼                        ▼                    ▼           │
- │   ┌────────────────────────────────────────────────────────────────┐   │
- │   │             SADH Acoustic Shadow Physics Estimator             │   │
- │   │      H_t = (L_s · H_s) / R_s  ·  Confidence Fusion Engine      │   │
- │   └───────────────────────────────┬────────────────────────────────┘   │
- │                                   │                                    │
- └───────────────────────────────────┼────────────────────────────────────┘
-                                     ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │                      STORAGE & TELEMETRY LAYER                         │
- │     SQLite (Local) · Supabase (Cloud Sync) · Prometheus Metrics        │
- └────────────────────────────────────────────────────────────────────────┘
-```
+## Application boundaries
 
-## 2. DSP Pipeline Stages
+Sonaris consists of a React/Vite single-page application and a FastAPI service. SQLAlchemy stores runs, detections, and reports in SQLite by default; file storage is local. Supabase integration is optional. The repository also contains research modules and historical evaluation artifacts that are not all part of the default serving path.
 
-1. **Beam Angle Correction (BAC)**: Normalizes across-range acoustic gain drop-off caused by spherical spreading and acoustic attenuation in seawater.
-2. **Homomorphic / Stripe Filtering**: Attenuates horizontal and vertical sonar striping caused by vessel heave, roll, and transducer ringing.
-3. **Slant Range Correction (SRC)**: Reprojects slant-range travel times ($R_s$) to true seafloor ground-range coordinates ($R_g = \sqrt{R_s^2 - H_s^2}$).
-4. **Adaptive Boundary Preservation**: Prevents over-smoothing of fine target edges using high-gradient bilateral weighting.
+| Responsibility | Source |
+| :--- | :--- |
+| Lifecycle, middleware, router mounting | `backend/app/main.py` |
+| Settings and database initialization | `backend/app/config.py`, `backend/app/database.py` |
+| Upload validation and orchestration | `backend/app/api/routes/detect.py` |
+| Preprocessor/model composition | `backend/app/services/factory.py` |
+| Inference abstraction | `backend/app/services/inference_service.py` |
+| ONNX/PyTorch serving | `backend/app/services/sonar_model_service.py` |
+| XTF parsing and tiled inference | `backend/app/services/xtf_parser.py`, `waterfall_tiling.py` |
+| Acoustic preprocessing | `backend/app/preprocessing/sonar_preprocessor.py` |
+| Mapping and physics estimates | `backend/app/services/georeference.py`, `sadh_physics.py` |
+| Persistence | `backend/app/models/orm.py`, `backend/app/repositories/` |
+| HTTP frontend client | `frontend/src/api/client.js` |
+| Screen routing | `frontend/src/App.jsx` |
+| Streaming transport | `backend/app/api/routes/waterfall.py` |
 
-## 3. SADH Acoustic Shadow Physics Formulation
+## Upload-to-report lifecycle
 
-Target height above the seabed ($H_t$) is derived geometrically from acoustic shadow length ($L_s$), towfish altitude ($H_s$), and slant range ($R_s$):
+1. The frontend sends a multipart file with scan metadata and optional filters.
+2. `/api/detect` checks contents, MIME/signature, size, depth ordering, and accepted metadata labels.
+3. The original file is saved and a database run is created with status `processing`.
+4. Images enter inference directly. XTF files are parsed into a waterfall, cached as PNG, and split into overlapping tiles.
+5. The factory-selected preprocessor applies enabled acoustic stages and prepares model input. The model service attempts available ONNX inference, with a PyTorch fallback path.
+6. Model coordinates are remapped; tiled results are translated and merged with global NMS.
+7. Results are normalized and filtered by confidence, class, and size. Georeferencing and heuristic shadow fields are added; patch generation is attempted.
+8. Detections and run metadata are persisted. Automatic report creation is attempted independently; failure is logged without necessarily failing the completed scan.
+9. Results, map points, report history, and export endpoints expose the stored information.
 
-$$H_t = \frac{L_s \cdot H_s}{R_s}$$
+## Processing defaults
 
-The **Physics Confidence Score** fuses:
-- Neural detector probability ($C_{yolo}$)
-- Expected physical dimensions for the detected marine debris class
-- Contrast ratio between the acoustic highlight and acoustic shadow
-- Non-zero shadow verification:
+Beam-angle correction, stripe filtering, and sharpening are enabled. Shadow inpainting is disabled. The preprocessor target defaults to 640×640; the ONNX input shape and PyTorch inference call can use a different size (the latter uses 800 in the current service).
 
-$$C_{physics} = \alpha C_{yolo} + \beta \min\left(1.0, \frac{H_t}{H_{expected}}\right) + \gamma S_{contrast}$$
+The factory supports `sonar` and `mock`. Mock predictions are development placeholders. D-GRM and model-level SADH are opt-in; separate route-level physics enrichment still runs. WERB, graph layers, GAN modules, and the six-class training YAML are research components, not proof that the shipped checkpoint was trained with all of them.
+
+## Storage and optional cloud integration
+
+The default SQLite database is relative to the process working directory. Uploads/outputs default to directories under `backend/data/`. Some export and patch services use separate root-relative output directories. Persisting only `data/` is therefore insufficient; see [deployment.md](deployment.md).
+
+Database initialization creates tables and includes ad hoc SQLite column additions. There is no general versioned migration system configured. Supabase clients/sync helpers use optional credentials and the supplied SQL schema, but should be validated for the selected workflow; they are not an automatic replacement for all local persistence.
+
+## Streaming boundary
+
+The mounted waterfall router has an in-memory connection manager. It broadcasts producer JSON or decoded XTF rows to connected sockets. It does not invoke upload inference, persist streamed pings, or distribute messages across worker processes. The frontend includes both stream-related hooks and demonstration displays; static status labels do not prove a live sensor connection.
+
+## Interpretation limits
+
+Box-coordinate conventions and physical-unit assumptions differ between parts of the code. The detect route's shadow estimates use fixed image dimensions and metadata-derived altitude proxies. Survey-derived bathymetry generation and synthetic salvage visualization are different endpoints. Keep these distinctions visible when demonstrating the application or reporting evaluation results.
+
+Preprocessing fallback improves resilience but does not guarantee every invalid input produces a successful response. Corrupt files, unavailable models, database failures, and export errors remain possible.

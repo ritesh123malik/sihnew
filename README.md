@@ -1,236 +1,447 @@
-# 🌊 Sonar Sentry — AI-Powered Automated Underwater Marine Debris & Anomaly Detection System
+<p align="center">
+  <img src="docs/assets/sonaris-banner.svg" alt="Sonaris — Turn sonar scans into underwater intelligence" width="100%" />
+</p>
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688.svg?style=flat&logo=FastAPI&logoColor=white)](https://fastapi.tiangolo.com)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)](https://pytorch.org)
-[![YOLO11](https://img.shields.io/badge/YOLO11s-Ultralytics-00FFFF.svg?style=flat)](https://github.com/ultralytics/ultralytics)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
-[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg?style=flat)]()
+<p align="center">
+  <a href="https://github.com/ritesh123malik/sihnew/actions/workflows/ci.yml"><img src="https://github.com/ritesh123malik/sihnew/actions/workflows/ci.yml/badge.svg" alt="CI workflow status" /></a>
+  <a href="frontend/package.json"><img src="https://img.shields.io/badge/frontend-v0.1.0-38bdf8" alt="Frontend package version 0.1.0" /></a>
+  <a href="#requirements"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white" alt="Python 3.11" /></a>
+  <a href="#technology"><img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18" /></a>
+  <a href="#tests-and-quality"><img src="https://img.shields.io/badge/coverage-not_published-slategray" alt="Coverage not published" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-not_specified-slategray" alt="License not specified" /></a>
+</p>
 
-**Ministry of Earth Sciences (MoES) — Smart India Hackathon (SIH 2026)**  
-*Domain:* Software / Renewable & Sustainable Marine Energy / Ocean Conservation  
+<p align="center"><strong>AI-assisted marine debris and anomaly detection from side-scan sonar images and XTF surveys.</strong><br />Upload a scan. Inspect detections. Explore the map. Export the evidence.</p>
 
----
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#demo-and-operator-workflow">Try the demo</a> ·
+  <a href="docs/architecture.md">Architecture</a> ·
+  <a href="docs/api.md">API reference</a> ·
+  <a href="https://github.com/ritesh123malik/sihnew/issues">Report an issue</a>
+</p>
 
-## 📌 Executive Summary
+> **Project status:** Sonaris is a research and demonstration application developed in the Smart India Hackathon 2026 context. The scan, inference, persistence, and reporting paths are implemented; experimental and simulated capabilities are identified below. The badge version belongs to the frontend package, not a published platform release.
 
-Modern hydrographic side-scan sonar (SSS) surveys capture vast acoustic swaths of the ocean floor, but manual review of waterfall sonograms is a critical operational bottleneck. Human interpretation is slow, fatiguing, and prone to high false-negative rates for hazardous anthropogenic debris — especially discarded fishing gear ("ghost nets"), sunken vessels, pipelines, aircraft, and unexploded munitions.
+## Demo and operator workflow
 
-**Sonar Sentry** delivers a real-time, end-to-end automated computer vision pipeline specifically engineered for acoustic side-scan sonar imagery. Unlike generic vision pipelines that fail when applied to raw acoustic records, Sonar Sentry integrates **domain-specific radiometric corrections** (Beam Angle Correction, 2D-FFT heave notch filtering, homomorphic contrast sharpening, Bottom-Line Detection, and acoustic shadow inpainting) with a fine-tuned **YOLO11s** detection model.
+Start both services with the [quick start](#quick-start), then open **[Sonaris locally](http://localhost:5173)**. No hosted-demo availability is claimed here.
 
----
+<details>
+<summary><strong>Preview a bundled sonar input</strong></summary>
 
-## 🚀 Key Features & Domain Innovation
+![Bundled source sonar screenshot with side-scan returns and a navigation display](demo_data/0b1e0189-vlcsnap-2025-12-09-20h50m42s408.png)
 
-### 1. Physics-Based Acoustic Preprocessing
-- **Column-wise Beam Angle Correction (BAC):** Normalizes cross-track grazing-angle acoustic falloff across range columns.
-- **2D-FFT Horizontal Stripe Filter:** Attenuates towfish heave and ping-synchronization scanline noise in frequency space ($u \approx 0, v \neq 0$) in **~7.8 ms**.
-- **Homomorphic Edge Sharpening:** Decouples acoustic illumination from high-frequency seabed target reflectance using log/exp domain unsharp masking.
-- **Bottom-Line Detection (BLD):** Identifies the first seafloor acoustic contact, delineating the nadir water-column blind zone.
-- **Acoustic Shadow Detection & Inpainting:** Detects low-backscatter shadow occlusions and synthesizes seabed texture via Fast Marching (Telea), Navier-Stokes, or PyTorch U-Net GAN.
+This is a **source-data example**, not a screenshot of the Sonaris interface or a verified detection result. Use the same image in the first API example below.
 
-### 2. High-Precision YOLO11s Inference & Target Classes
-- **Five Verified Model Classes:**
-  1. **Shipwreck** (Class ID `0`)
-  2. **Aircraft** (Class ID `1`)
-  3. **Submarine Pipeline** (Class ID `2`)
-  4. **Ghost Net** (Class ID `3`)
-  5. **Mine / Munitions** (Class ID `4`)
-- **Per-Class Confidence Thresholds:** Automatically loaded from `model/per_class_thresholds.csv` (Shipwreck: `0.326`, Aircraft: `0.527`, Submarine Pipeline: `0.750`, Ghost Net: `0.814`, Mine / Munitions: `0.289`).
-- **Interactive Threshold Override:** When operators leave the frontend confidence slider untouched, the per-class thresholds are used. If an operator adjusts the slider, that custom threshold is applied globally across all classes.
-- **Coordinate Un-letterboxing:** Exact inverse mathematical transformation remapping $(640, 640)$ inference bounding boxes back to the original full-resolution sonar coordinate frame.
+</details>
 
-### 3. XTF Waterfall Tiling & Coordinate Restoration
-- **End-to-End Waterfall Pipeline:**
-  $$\text{XTF Ingestion} \longrightarrow \text{Full Waterfall} \longrightarrow \text{Overlapping Tiles} \longrightarrow \text{Inference} \longrightarrow \text{Global Coordinate Translation} \longrightarrow \text{Global NMS}$$
-- **Configurable Tiling Environment Variables:**
-  - `XTF_TILE_WIDTH`: Tile width in pixels (default: `640`).
-  - `XTF_TILE_HEIGHT`: Tile height in pixels (default: `640`).
-  - `XTF_TILE_OVERLAP`: Fractional overlap between adjacent tiles (default: `0.20`, or 20%).
-- **Optional Graph Reasoning (D-GRM):** Debris-Graph Reasoning Module is optional and **disabled by default** (`USE_DGRM=false`), operating only when `USE_DGRM=true` is explicitly configured. The implementation uses native 512-dimensional YOLO11s SPPF features and reuses a D-GRM instance.
+| Step | Screen | What you can do |
+| :--- | :--- | :--- |
+| **01 · Configure** | `/` | Select an image or XTF file; set position, sonar type, resolution, depth range, and class filters. |
+| **02 · Analyze** | `/results/:runId` | Inspect detection boxes, class confidence, risk summaries, and available anomaly details. |
+| **03 · Revisit** | `/uploads` | Browse stored scan runs and reopen their results. |
+| **04 · Locate** | `/map` | Explore detection positions on a Leaflet map. |
+| **05 · Report** | `/reports` | Browse reports and export results for downstream review. |
+| **06 · Stream** | `/live-survey` | Inspect waterfall visualization and use the XTF/image ingestion controls. Some displayed telemetry is demonstrative. |
 
-### 4. Real-Time Performance & High Throughput
-- Optimized pipeline processes **1920×1080** full-resolution sonar frames in **82.2 ms** (~12.2 FPS) on standard CPU.
-- Well within the $< 150\text{ ms}$ requirement for real-time edge processing aboard survey vessels and Autonomous Underwater Vehicles (AUVs).
+**A successful first run:** the backend health response is available, the uploaded scan receives a `run_id`, and its results can be reopened from Uploads. Zero detections is a valid outcome; a sample image is not a guarantee of a particular class or score.
 
-### 5. Production-Grade Architecture & Observability
-- **100% Graceful Degradation:** Preprocessing exceptions automatically fall back to raw input without raising 500 errors.
-- **Prometheus Metrics:** Integrated `/metrics` endpoint tracking request latency, preprocessing time, inference duration, and anomaly class counts.
-- **Containerized Deployment:** Multi-stage `Dockerfile` and `docker-compose.yml` for single-command deployment.
+## What Sonaris does
 
----
+Sonar surveys capture large areas of seabed, but reviewing every return manually is demanding. Sonaris combines acoustic image preprocessing, a trained detector, and a browser-based review workflow to help an operator identify and organize candidate underwater objects.
 
-## 📊 Preprocessing Performance Benchmarks
+### Core capabilities
 
-Benchmarked across 10 high-resolution ($1920\times1080$) real side-scan sonar waterfall images (Apple Silicon CPU, single-thread):
+| Capability | Implementation |
+| :--- | :--- |
+| **Image and survey ingestion** | JPEG, PNG, TIFF, and Triton XTF uploads; file signature checks and a configurable 500 MB default limit. |
+| **Acoustic preprocessing** | Beam-angle correction, FFT stripe attenuation, homomorphic sharpening, and optional shadow inpainting before model inference. |
+| **Object detection** | Ultralytics checkpoint loading, ONNX Runtime support with PyTorch fallback, class filtering, and confidence controls. |
+| **Large-waterfall analysis** | Overlapping XTF tiles, restoration to waterfall coordinates, and global non-maximum suppression. |
+| **Detection review** | Bounding boxes, class/confidence/risk summaries, cropped anomaly patches, and shadow-related estimates. |
+| **Survey history** | SQLite-backed runs, detections, and reports, with local upload/output storage. |
+| **Mapping and exports** | Detection coordinates, CSV, JSON, GeoJSON, KML, PDF dossiers, and specialized geospatial endpoints. |
+| **Streaming transport** | WebSocket broadcast of waterfall pings and supplied detections; binary XTF records can be rendered into ping rows. |
+| **Observability** | Health/readiness/liveness endpoints, request IDs, rate limiting, and Prometheus metrics. |
+| **Optional cloud integration** | Supabase services and schema for cloud data integration; local operation does not require credentials. |
 
-```
-===========================================================
-  SONAR SENTRY PREPROCESSING BENCHMARK (N=10 images)
-===========================================================
+### Detection classes
 
-1. Overall Pipeline Latency Comparison:
-   - Identity Preprocessor (no-op) :    0.00 ms / image
-   - SonarPreprocessor (Full SSS)  :   82.22 ms / image (12.2 FPS)
+The checked-in [run metadata](model/run_config.json) identifies a **YOLO11s** model and five classes. The serving code reads names from the loaded model; replacing a checkpoint can change its labels.
 
-2. Detailed Stage Breakdown (Image dimensions: 1920x1080):
-   - Beam Angle Correction (BAC)   :   11.78 ms
-   - 2D-FFT Stripe Noise Filter    :    7.81 ms  (12.3x speedup)
-   - Homomorphic Edge Sharpening   :   15.41 ms  (1.6x speedup)
-   - Acoustic Shadow Detection     :   18.10 ms
-   - Shadow Inpainting (Telea)     :   29.66 ms  (5.8x speedup)
-   - YOLOv8 Letterbox + Normalize  :    1.28 ms
-===========================================================
-```
+| ID | Class | Default final confidence cutoff |
+| ---: | :--- | ---: |
+| 0 | Shipwreck | 0.3263 |
+| 1 | Aircraft | 0.5265 |
+| 2 | Submarine pipeline | 0.7497 |
+| 3 | Ghost net | 0.8138 |
+| 4 | Mine / munitions | 0.2893 |
 
----
+Cutoffs come from [model/per_class_thresholds.csv](model/per_class_thresholds.csv). Leaving the launch confidence slider untouched omits `confidence_threshold`, allowing these class-specific filters. Supplying an integer percentage selects the final global filter; it cannot restore candidates already removed inside the detector.
 
-## 🏗️ Architecture Pipeline
+### Experimental features and current boundaries
 
-```
-  ┌────────────────────────────────────────────────────────┐
-  │         Raw Side-Scan Sonar Data Ingestion             │
-  │            (JPEG, PNG, TIFF, Waterfall)                │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │         Radiometric & Geometric Corrections            │
-  │  1. Column-wise Beam Angle Correction (BAC)            │
-  │  2. 2D-FFT Horizontal Stripe Noise Removal (7.8 ms)    │
-  │  3. Homomorphic Illumination/Reflectance Sharpening    │
-  │  4. Bottom-Line Detection (BLD Seafloor Contact)       │
-  │  5. Acoustic Shadow Inpainting (OpenCV / PyTorch GAN)  │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │         Letterbox Transformation & Formatting          │
-  │       (3, 640, 640) Float32 Tensor + Metadata          │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │             YOLO11s Acoustic Inference                 │
-  │      Model: model/best.pt (5 Model Classes)            │
-  │      XTF: Overlapping Tiles -> Global NMS              │
-  └──────────────────────────┬─────────────────────────────┘
-                             │
-                             ▼
-  ┌────────────────────────────────────────────────────────┐
-  │       Coordinate Remapping & Mission Analytics         │
-  │  • Un-letterbox bounding boxes to original pixels      │
-  │  • Global coordinate restoration for waterfall tiles   │
-  │  • Calculate geographic coordinates, depth & area      │
-  │  • Risk categorization (Critical / High / Medium)      │
-  │  • Generate executive summary report & CSV export      │
-  └────────────────────────────────────────────────────────┘
+- **D-GRM graph reasoning and model-level SADH:** opt-in through `USE_DGRM=true` and `USE_SADH=true`; both are off by default. The detect route separately adds heuristic shadow-height and physics-confidence fields.
+- **Shadow inpainting:** off by default. Telea, Navier–Stokes, and GAN-related implementations exist; validate a chosen method and its weights before relying on it.
+- **Live inference:** the mounted WebSocket handler broadcasts pings and caller-provided detections. It does **not** run the detector on each incoming ping.
+- **Bathymetry:** the upload endpoint estimates relief from shadow geometry. The salvage mesh endpoint generates synthetic terrain; its `run_id` does not make that terrain survey-derived.
+- **Recovery planning:** salvage routes use stored detections when available and return a labeled simulated scenario when none exist.
+- **Position and dimensions:** coordinates, depth, area, and shadow-height fields can depend on metadata and approximations. They are review aids, not independently measured hydrographic ground truth.
+- **Public hosting:** the current app has permissive CORS and no application authentication. See the concrete deployment requirements in [deployment.md](docs/deployment.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Image upload] --> C[Acoustic preprocessing]
+    B[XTF upload] --> W[Parse waterfall]
+    W --> T[Overlapping tiles]
+    T --> C
+    C --> D[ONNX or PyTorch detector]
+    D --> E[Restore coordinates and merge boxes]
+    E --> F[Confidence and class filters]
+    F --> G[Metadata and physics estimates]
+    G --> H[(SQLite and local files)]
+    H --> I[Results and map]
+    H --> J[Reports and exports]
+    S[WebSocket pings] --> V[Broadcast waterfall stream]
 ```
 
----
+The streaming transport is a separate path from upload inference. See [the architecture guide](docs/architecture.md) for module ownership, model selection, storage, and implementation limits.
 
-## 🛠️ Quick Start Guide
+## Requirements
 
-### 1. Backend Setup
+| Component | Baseline |
+| :--- | :--- |
+| Operating system | Linux, macOS, or Windows; CI runs on Ubuntu. Windows commands are included below. |
+| Python | **3.11**, matching CI and the backend Docker image. Other versions are not asserted as verified. |
+| Node.js | **20**, matching the frontend Docker image; npm is required. |
+| Model artifacts | `model/best.pt` is tracked; an ONNX artifact is also included. No external model download is required for the bundled setup. |
+| Compute | CPU execution is available. A GPU is optional; accelerated use depends on your PyTorch/runtime installation. |
+| Storage | Allow space for repository datasets, ML dependencies, uploads, and generated reports. No measured minimum RAM/disk requirement is published. |
+| Optional tools | Docker with Compose; Supabase account for cloud integration; NVIDIA tooling for the TensorRT experiments. |
+
+## Quick start
+
+Run backend commands from the **repository root**, so `.env`, database paths, and artifacts resolve consistently.
+
+### 1. Clone and install
 
 ```bash
-# Setup virtual environment
-python -m venv .venv
-
-# Activate virtual environment:
-# On Linux/macOS:
+git clone https://github.com/ritesh123malik/sihnew.git
+cd sihnew
+python3.11 -m venv .venv
 source .venv/bin/activate
-# On Windows PowerShell:
-.venv\Scripts\Activate.ps1
-
-# Install backend dependencies
-pip install -r backend/requirements.txt
-
-# Launch FastAPI backend
-PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cp .env.example .env
 ```
 
-- API Server: `http://localhost:8000`
-- Interactive Swagger UI: `http://localhost:8000/docs`
-- Prometheus Dashboard: `http://localhost:9090`
+The dependency file is **`requirements.txt` at the root**. There is no `backend/requirements.txt`.
 
-### 2. Frontend Setup
+<details>
+<summary>Windows PowerShell equivalent</summary>
+
+```powershell
+git clone https://github.com/ritesh123malik/sihnew.git
+Set-Location sihnew
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Use `curl.exe` in place of `curl` for the HTTP examples if PowerShell aliases `curl`.
+
+</details>
+
+### 2. Start the API
 
 ```bash
-# Navigate to frontend directory
+python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+```
+
+- [Health](http://localhost:8000/api/health)
+- [Interactive Swagger documentation](http://localhost:8000/docs)
+- [OpenAPI schema](http://localhost:8000/openapi.json)
+- [Prometheus metrics](http://localhost:8000/metrics)
+
+### 3. Start the frontend
+
+Open a second terminal at the repository root:
+
+```bash
 cd frontend
-
-# Install frontend dependencies
-npm install
-
-# Start local Vite development server
+cp .env.example .env
+npm ci
 npm run dev
-
-# Or build production assets
-npm run build
 ```
 
----
+On PowerShell, replace `cp` with `Copy-Item`. Open **[http://localhost:5173](http://localhost:5173)**. Keep both terminals running.
 
-## 🧪 Testing Suite
+### 4. Submit your first scan
 
-Sonar Sentry features an extensive, production-grade test suite covering physics corrections, model services, XTF waterfall tiling, per-class thresholds, and class filtering:
+From the repository root, with the API running:
 
 ```bash
-# Run all tests with coverage
-PYTHONPATH=backend pytest backend/tests/ -v
-
-# Run core detection and tiling regression suite
-PYTHONPATH=backend pytest backend/tests/test_sonar_model_service_comprehensive.py \
-    backend/tests/test_model_service.py \
-    backend/tests/test_integration.py \
-    backend/tests/test_xtf_upload.py \
-    backend/tests/test_detect_api.py \
-    backend/tests/test_per_class_thresholds.py \
-    backend/tests/test_waterfall_tiling.py \
-    backend/tests/test_dgrm_yolo11.py \
-    backend/tests/test_class_filters.py -q
+curl --fail-with-body http://localhost:8000/api/detect \
+  -F 'file=@demo_data/0b1e0189-vlcsnap-2025-12-09-20h50m42s408.png;type=image/png' \
+  -F 'latitude=13.0628' \
+  -F 'longitude=80.3582' \
+  -F 'sonar_type=Side-Scan' \
+  -F 'resolution=0.1 m/px' \
+  -F 'depth_min=4' \
+  -F 'depth_max=38' \
+  -F 'min_object_size=0'
 ```
 
-**Key Test Coverage:**
-- **SSS Preprocessing (`test_sonar_preprocessor.py`):** BAC normalization, 2D-FFT filtering, homomorphic sharpening, BLD, shadow detection, and inpainting.
-- **XTF Waterfall Tiling (`test_waterfall_tiling.py`):** Overlapping tile slicing, global coordinate translation, and cross-tile greedy NMS.
-- **Per-Class Thresholds (`test_per_class_thresholds.py`):** Model threshold CSV loading and frontend slider manual override dynamics.
-- **Class Filtering (`test_class_filters.py`):** Five-class canonical normalization, individual/multi-class selection, and unknown class rejection.
-- **D-GRM Module (`test_dgrm_yolo11.py`):** Deterministic SPPF layer hook, native 512-dimensional feature extraction, instance reuse, and score enhancement verification.
-- **Edge Cases (`TestEdgeCases`):** Tiny $10\times10$, large $2000\times2000$, extreme aspect ratios ($1500\times50$), RGBA, grayscale, all-black, all-white, and speckle noise.
-- **Memory Leak Protection (`test_preprocessing_memory.py`):** Tracks RSS memory across 100 consecutive frames with `psutil`.
-- **Concurrency & Thread Safety (`test_concurrent_api.py`):** Validates thread safety under parallel multi-threaded load.
-- **Failure Injection & Fallback (`test_preprocessing_fallback.py`):** Simulates failures in all sub-stages to verify zero unhandled exceptions.
-- **Prometheus Observability (`test_metrics_api.py`):** Validates `/metrics` scraper format.
+This example disables the final size filter and keeps class-specific confidence defaults. Inspect `run_id`, `detection_summary`, `detections`, `model`, and `timestamps` in the returned JSON. API box units currently require care; see [the API notes](docs/api.md#coordinate-and-filter-notes).
 
----
+## Usage examples
 
-## 💡 Evaluator & Judge Q&A Guide
+### Python upload client
 
-### Q1: Why not feed raw sonar images directly into YOLO?
-**Answer:** Raw side-scan sonar images suffer from severe non-uniform acoustic energy falloff (grazing angle attenuation across range), towfish heave striping (wave motion on the surface vessel), and dark acoustic shadows behind elevated objects. Feeding raw images directly causes:
-1. False positives triggered by heave striping mistaken for linear pipelines.
-2. Missed detections in outer range columns where acoustic backscatter is dim.
-3. Boundary truncation due to dark acoustic shadows.
-Our domain-specific preprocessing pipeline resolves these physical artifacts prior to tensor normalization, dramatically improving recall and precision.
+`httpx` is included in the backend requirements. Run from the repository root:
 
-### Q2: How does the pipeline achieve real-time latency (<150 ms) on 1080p images?
-**Answer:** Through multi-level engineering optimizations:
-1. **Luminance Extraction:** For color/pseudo-color sonograms, 2D-FFT and homomorphic filtering operate exclusively on the Luminance ($Y$) channel in YCrCb color space, avoiding redundant 3-channel processing.
-2. **Frequency Downsampling:** 2D-FFT notch filtering is computed at 2x downsampled resolution (~4x fewer frequency bins) where horizontal stripe frequencies are cleanly captured, reducing FFT latency from 95.8 ms to **7.8 ms**.
-3. **Inpainting Gating:** Shadow inpainting is skipped if total shadow area is under 200 pixels, and computed with adaptive resolution, reducing inpaint time from 171.1 ms to **29.6 ms**.
-4. **Strided Percentiles:** Contrast stretching samples every 4th pixel instead of sorting 2M values.
-Total preprocessing latency dropped from **218 ms to 82.2 ms** (12.2 FPS).
+```python
+from pathlib import Path
+import httpx
 
-### Q3: What happens if an image is corrupted or preprocessing fails?
-**Answer:** Sonar Sentry enforces a strict **graceful degradation architecture**. Each stage (BAC, FFT, Sharpening, Shadow Inpainting) is isolated in a try-except block that logs a warning and passes the uncorrected array to the next stage if an exception occurs. If total preprocessing fails, the pipeline automatically falls back to raw bytes. The API will never return a 500 error to survey operators due to a preprocessing fault.
+scan = Path("demo_data/0b1e0189-vlcsnap-2025-12-09-20h50m42s408.png")
+with scan.open("rb") as handle:
+    response = httpx.post(
+        "http://localhost:8000/api/detect",
+        files={"file": (scan.name, handle, "image/png")},
+        data={
+            "sonar_type": "Side-Scan",
+            "resolution": "0.1 m/px",
+            "depth_min": "4",
+            "depth_max": "38",
+            "selected_classes": "shipwreck,ghost_net",
+            "min_object_size": "0",
+        },
+        timeout=180.0,
+    )
+response.raise_for_status()
+result = response.json()
+print(result["run_id"], result["detection_summary"])
+```
 
-### Q4: How are detection bounding boxes mapped back to original coordinates?
-**Answer:** Standard YOLO letterboxing uses symmetric padding to $(640, 640)$ to preserve aspect ratio. `YOLOPreprocessor` calculates and returns a `LetterboxMeta` object recording the exact scaling factor and symmetrical top/left offsets. In `SonarModelService`, every predicted box $[x_1, y_1, x_2, y_2]$ is un-letterboxed using the inverse transformation:
-$$x = \frac{x_{\text{box}} - \text{pad\_left}}{\text{scale}}, \quad y = \frac{y_{\text{box}} - \text{pad\_top}}{\text{scale}}$$
-For tiled full-waterfall XTF sonograms, each tile offset is added back so that all bounding boxes, areas, and depths on the client UI align with exact seafloor coordinates.
+### Browse runs and export detections
 
----
+```bash
+curl --fail http://localhost:8000/api/runs
+curl --fail http://localhost:8000/api/export/detections/csv -o detections.csv
+curl --fail http://localhost:8000/api/export/geojson -o detections.geojson
+```
 
-## 📜 License
-Developed for the **Smart India Hackathon (SIH 2026)** — Ministry of Earth Sciences (MoES) Problem Statement.
+For run-scoped downloads, append `?run_id=YOUR_RUN_ID` to these export URLs. More formats and report endpoints are listed in [docs/api.md](docs/api.md).
+
+### Send synthetic waterfall telemetry
+
+With the API running, use the included sender:
+
+```bash
+python scripts/stream_xtf_to_websocket.py --delay 80
+```
+
+With no `--file`, this creates synthetic XTF data and transmits its rows. To replay a file, add `--file /absolute/path/to/survey.xtf`. This exercises stream transport, not model detection.
+
+## Configuration
+
+Copy [the root environment template](.env.example) to `.env` for backend settings and [the frontend template](frontend/.env.example) to `frontend/.env`. Restart the backend after changing settings; rebuild the frontend after changing production `VITE_*` values.
+
+<details>
+<summary><strong>Common options and defaults</strong></summary>
+
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `MODEL_PROVIDER` | `sonar` | Real inference; `mock` gives deterministic placeholders. |
+| `MODEL_PATH` | Empty; auto-discovery | Explicit PyTorch checkpoint selection. ONNX discovery is separate. |
+| `MODEL_VERSION` | `colab-best` | Metadata/API version label, not a release tag. |
+| `DATABASE_URL` | `sqlite:///./sonar_sentry.db` | SQLAlchemy database connection. |
+| `MAX_FILE_SIZE_MB` | `500` | Upload-size limit for detection routes. |
+| `SSS_ENABLE_PROCESSING` | `true` | Enable sonar preprocessing. |
+| `SSS_ENABLE_BAC` | `true` | Beam-angle correction. |
+| `SSS_ENABLE_STRIPE_FILTER` | `true` | Stripe attenuation. |
+| `SSS_ENABLE_SHARPENING` | `true` | Homomorphic sharpening. |
+| `SSS_ENABLE_SHADOW_INPAINTING` | `false` | Optional shadow filling. |
+| `SSS_SHADOW_THRESHOLD` | `0.15` | Shadow detection threshold. |
+| `SSS_SHADOW_INPAINT_METHOD` | `telea` | Inpainting method. |
+| `YOLO_TARGET_SIZE` | `[640,640]` | Preprocessor target; not a universal inference-size override. |
+| `YOLO_NORMALIZE` | `true` | Normalize preprocessor tensor. |
+| `XTF_TILE_WIDTH` / `XTF_TILE_HEIGHT` | `640` / `640` | Waterfall tile dimensions. |
+| `XTF_TILE_OVERLAP` | `0.20` | Fractional overlap. |
+| `USE_DGRM` / `USE_SADH` | `false` / `false` | Optional model-level reasoning/physics paths. |
+| `WATCHDOG_DISABLE` | Unset | Set `1` to disable the model-file watcher, as CI does. |
+| `VITE_API_URL` | `http://localhost:8000` | Frontend HTTP API base. |
+| `VITE_WS_URL` | Derived from API URL | If supplied, use the complete WebSocket URL ending in `/ws/waterfall`. |
+
+`Settings` values are read through Pydantic from `.env`. XTF tiling, D-GRM/SADH, and watchdog switches use direct process-environment reads: **export them in the shell or provide container environment variables**, rather than assuming a `.env` entry will set `os.environ`.
+
+See [configuration.md](docs/configuration.md) for storage overrides, Supabase credentials, inference artifacts, and CORS behavior.
+
+</details>
+
+## API at a glance
+
+| Method | Endpoint | Purpose |
+| :--- | :--- | :--- |
+| `POST` | `/api/detect` | Upload and analyze an image or XTF survey. |
+| `POST` | `/api/detect/xtf` | XTF convenience route; alias `/api/xtf/upload`. |
+| `POST` | `/api/predict` | Lightweight JPEG/PNG prediction response. |
+| `GET` | `/api/runs` | Paginated run history. |
+| `GET` | `/api/runs/{run_id}` | Run details. |
+| `GET` | `/api/reports` | Paginated report history. |
+| `GET` | `/api/map/points` | Detection map data. |
+| `GET` | `/api/export/detections/csv` | CSV export, optionally filtered by run. |
+| `GET` | `/api/export/dossier` | PDF dossier. |
+| `WS` | `/ws/waterfall` | Waterfall broadcast transport. |
+| `GET` | `/api/health/ready` | Readiness check. |
+| `GET` | `/metrics` | Prometheus exposition. |
+
+**[Full API guide →](docs/api.md)** · The running server's `/docs` is the authoritative generated parameter/schema reference.
+
+## Tests and quality
+
+From the root with the virtual environment activated:
+
+```bash
+python -m pytest backend/tests/ --tb=short -q
+python -m pytest backend/tests/ --cov=backend/app --cov-report=term-missing --cov-report=html
+node frontend/test_launch_form_data.mjs
+```
+
+The backend suite covers preprocessing, model services, confidence/class filtering, XTF parsing and tiling, persistence, exports, geospatial utilities, health, concurrency, and failure handling. Some tests use mocks or synthetic data; passing them is not a field-accuracy certification. The Node script checks a simulated FormData builder, not a browser end-to-end session.
+
+[GitHub Actions](.github/workflows/ci.yml) runs backend tests with Python 3.11, then builds and smoke-tests the backend Docker image. It sets `YOLO_OFFLINE=1`, `ULTRALYTICS_AUTOINSTALL=0`, and `WATCHDOG_DISABLE=1`. No published coverage percentage or frontend CI job is configured, so neither is claimed by the badges.
+
+## Build and deployment
+
+### Frontend build
+
+```bash
+cd frontend
+npm ci
+npm run build
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+`frontend/dist/` contains the static build. Preview is for local verification. Production static hosting needs an SPA fallback to `index.html`; [frontend/vercel.json](frontend/vercel.json) provides the Vercel rewrite.
+
+### Backend container
+
+```bash
+docker build -t sonaris:local .
+docker run --rm -p 8000:8000 --env-file .env sonaris:local
+```
+
+This is an ephemeral smoke run. Use explicit volumes and storage settings for persistent deployments.
+
+The repository also includes Compose, Render-style process files, and Nixpacks configuration. **Read [deployment.md](docs/deployment.md) before using Compose:** its frontend variables are supplied at runtime even though Vite consumes them at build time, and its default mounts do not persist all actual backend storage paths. Prometheus configuration is included, but Compose does not start a Prometheus server on port 9090.
+
+## Model evidence and reproducibility
+
+These are **recorded artifact metrics**, not measurements from every deployment or a new benchmark of this checkout:
+
+| Metric | Recorded value |
+| :--- | ---: |
+| Precision | 94.36% |
+| Recall | 75.73% |
+| mAP@0.50 | 74.68% |
+| mAP@0.50:0.95 | 64.07% |
+| Evaluation confidence | 0.4765 |
+
+Source: [test_final_at_chosen_conf.json](model/test_final_at_chosen_conf.json). The [speed report](model/speed_report.json) records 27.9 ms/image and 35.8 FPS at input size 800, but does not identify the hardware/runtime; it is not an end-to-end API latency guarantee. The [run configuration](model/run_config.json) explicitly says its metadata was reconstructed after an account migration.
+
+Use [benchmark_preprocessing.py](benchmark_preprocessing.py), [evaluate_pipeline.py](evaluate_pipeline.py), and the scripts in `scripts/` as starting points for reproducible evaluation. Record the dataset split, checkpoint hash, device, runtime, input size, and preprocessing settings alongside any new results. [The model guide](model/README.md) explains the artifacts and the legacy training configuration.
+
+## Repository map
+
+```text
+sihnew/
+├── backend/app/
+│   ├── api/routes/       # HTTP and WebSocket endpoints
+│   ├── preprocessing/    # Acoustic filters and input preparation
+│   ├── services/         # Inference, XTF, reports, storage, geospatial utilities
+│   ├── models/           # ORM tables and experimental neural modules
+│   ├── repositories/     # Database access
+│   └── schemas/          # API and internal data contracts
+├── backend/tests/        # Backend regression and integration tests
+├── frontend/src/         # React screens, maps, waterfall canvas, API clients
+├── model/                # Serving artifacts and recorded evaluation metadata
+├── models/               # Auxiliary GAN checkpoint
+├── configs/              # Threshold copies and experimental training configuration
+├── demo_data/            # Bundled sonar input examples
+├── sonar_images_dataset/ # Curated image showcase and manifest
+├── xtf_dataset/          # Curated XTF showcase and manifest
+├── data/                 # Processed samples and NOAA dataset metadata
+├── scripts/              # Evaluation, export, replay, and dataset utilities
+└── docs/                 # API, architecture, configuration, deployment, assets
+```
+
+`sonar_sentry` and earlier project names remain in database defaults, historical reports, scripts, and training metadata for compatibility. **The project name is Sonaris.**
+
+## Troubleshooting
+
+<details>
+<summary><strong>Common startup and integration issues</strong></summary>
+
+| Symptom | Check |
+| :--- | :--- |
+| `No module named app` | Run from the root with `--app-dir backend`. |
+| Model unavailable | Confirm artifacts exist and inspect backend logs; review both ONNX discovery and `MODEL_PATH`. |
+| Unexpected class names | Check the loaded artifact's metadata, not legacy comments or the experimental six-class YAML. |
+| Empty detection list | Check class cutoffs, selected classes, source-image quality, and size filtering. Try `min_object_size=0` diagnostically. |
+| Invalid upload | Supply JPEG/PNG/TIFF or a supported XTF file with real binary contents; renaming an arbitrary file is insufficient. |
+| Browser cannot reach backend | Set a browser-reachable `VITE_API_URL` before building; Docker service names are not normally browser hostnames. |
+| WebSocket will not connect | Use the full `ws://…/ws/waterfall` or `wss://…/ws/waterfall` URL and enable proxy upgrade support. |
+| Supabase errors on a local run | Leave credentials blank in the root `.env`; cloud integration is optional. |
+| Export URL returns 404 | Confirm the route and artifact type; bathymetry export currently returns a filesystem path and an unmounted URL. |
+| Native dependency installation fails | Use Python 3.11 and compatible wheels; the backend Dockerfile provides a Linux baseline. |
+
+</details>
+
+## Roadmap
+
+The following are proposed improvements, not promises of delivered functionality:
+
+- [ ] Publish a reproducible evaluation protocol with artifact hashes, dataset provenance, and hardware details.
+- [ ] Unify detection box units and validate size/geospatial calculations across image and XTF paths.
+- [ ] Connect stream ingestion to bounded inference and label simulated telemetry consistently.
+- [ ] Replace synthetic terrain with validated survey-derived reconstruction.
+- [ ] Align Compose build-time frontend configuration and persistent storage mounts.
+- [ ] Add authentication, restrictive CORS, and access controls for deployments.
+- [ ] Consolidate threshold files and model/training metadata.
+- [ ] Add frontend end-to-end CI and publish measured coverage.
+- [ ] Select a project license and audit model/dataset redistribution terms.
+
+## Contributing and community
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, focused validation, and the pull-request checklist. Follow the [Code of Conduct](CODE_OF_CONDUCT.md). Include documentation updates whenever an endpoint, default, artifact, or user workflow changes.
+
+For bugs and feature requests, [open an issue](https://github.com/ritesh123malik/sihnew/issues). Include reproduction steps, runtime versions, relevant settings without secrets, and a small shareable input when possible. Contact the maintainer through [@ritesh123malik](https://github.com/ritesh123malik). No project support email or enabled Discussions forum is specified.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the documentation update and [repository history](https://github.com/ritesh123malik/sihnew/commits) for implementation changes. Historical PDFs are snapshots and may describe earlier names or behavior; current source and generated API schemas take precedence.
+
+## License
+
+**No project `LICENSE` file is currently present.** This README does not assign a license or grant redistribution rights for code, model weights, or datasets. A maintainer must choose the project license; third-party artifacts retain their own terms. The license badge reports this state rather than implying MIT, Apache, or another license.
+
+## Technology
+
+| Layer | Dependencies |
+| :--- | :--- |
+| Web interface | React 18, Vite 5, React Router, Leaflet / React Leaflet, Three.js |
+| API and persistence | FastAPI, Uvicorn, Pydantic, SQLAlchemy, SQLite |
+| Detection and processing | Ultralytics, PyTorch, ONNX Runtime, OpenCV, NumPy, SciPy, scikit-image |
+| Geospatial and reports | Rasterio, PyProj, Matplotlib, ReportLab |
+| Integration and operations | Supabase, WebSockets, Prometheus client, Watchdog, Docker |
+
+Thank you to the maintainers of these dependencies and the contributors to the survey datasets. See [NOAA dataset metadata](data/noaa_hudson_river_dataset/README.md), the [image showcase](sonar_images_dataset/README.md), and the [XTF showcase](xtf_dataset/README.md) for available provenance. Their inclusion does not imply endorsement by a data provider or hackathon organizer.
+
+<p align="center"><strong>Sonaris</strong><br />From acoustic returns to reviewable evidence.</p>
