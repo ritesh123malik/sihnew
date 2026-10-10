@@ -138,7 +138,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-The dependency file is **`requirements.txt` at the root**. There is no `backend/requirements.txt`.
+For this root-based setup, use **`requirements.txt` at the root**. The separate `backend/requirements.txt` is retained for backend-only deployments and contains a smaller dependency set.
 
 <details>
 <summary>Windows PowerShell equivalent</summary>
@@ -277,7 +277,6 @@ Copy [the root environment template](.env.example) to `.env` for backend setting
 | `USE_DGRM` / `USE_SADH` | `false` / `false` | Optional model-level reasoning/physics paths. |
 | `WATCHDOG_DISABLE` | Unset | Set `1` to disable the model-file watcher, as CI does. |
 | `VITE_API_URL` | `http://localhost:8000` | Frontend HTTP API base. |
-| `VITE_WS_URL` | Derived from API URL | If supplied, use the complete WebSocket URL ending in `/ws/waterfall`. |
 
 `Settings` values are read through Pydantic from `.env`. XTF tiling, D-GRM/SADH, and watchdog switches use direct process-environment reads: **export them in the shell or provide container environment variables**, rather than assuming a `.env` entry will set `os.environ`.
 
@@ -426,7 +425,7 @@ For bugs and feature requests, [open an issue](https://github.com/ritesh123malik
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for the documentation update and [repository history](https://github.com/ritesh123malik/sihnew/commits) for implementation changes. Historical PDFs are snapshots and may describe earlier names or behavior; current source and generated API schemas take precedence.
+See [CHANGELOG.md](CHANGELOG.md) for changes and the [cleanup audit](docs/cleanup.md) for removal decisions and validation. Superseded audit snapshots were removed from the current tree and remain recoverable in [repository history](https://github.com/ritesh123malik/sihnew/commits).
 
 ## License
 
@@ -436,7 +435,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the documentation update and [repository hi
 
 | Layer | Dependencies |
 | :--- | :--- |
-| Web interface | React 18, Vite 5, React Router, Leaflet / React Leaflet, Three.js |
+| Web interface | React 18, Vite 5, React Router, Leaflet / React Leaflet |
 | API and persistence | FastAPI, Uvicorn, Pydantic, SQLAlchemy, SQLite |
 | Detection and processing | Ultralytics, PyTorch, ONNX Runtime, OpenCV, NumPy, SciPy, scikit-image |
 | Geospatial and reports | Rasterio, PyProj, Matplotlib, ReportLab |

@@ -48,7 +48,7 @@ Database initialization creates tables and includes ad hoc SQLite column additio
 
 ## Streaming boundary
 
-The mounted waterfall router has an in-memory connection manager. It broadcasts producer JSON or decoded XTF rows to connected sockets. It does not invoke upload inference, persist streamed pings, or distribute messages across worker processes. The frontend includes both stream-related hooks and demonstration displays; static status labels do not prove a live sensor connection.
+The mounted waterfall router has an in-memory connection manager. It broadcasts producer JSON or decoded XTF rows to connected sockets. It does not invoke upload inference, persist streamed pings, or distribute messages across worker processes. The active Live Survey screen uses upload handling and demonstration displays. Its unused standalone streaming hook was removed during cleanup; static status labels do not prove a live sensor connection.
 
 ## Interpretation limits
 

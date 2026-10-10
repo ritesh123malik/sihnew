@@ -4,7 +4,7 @@
 
 ## Static frontend and API service
 
-Build the frontend from `frontend/` with `npm ci` and `npm run build`. Set `VITE_API_URL` to a browser-reachable HTTPS API base **before the build**; set a full `VITE_WS_URL` if needed. Serve `frontend/dist/` with an `index.html` fallback for React Router. The Vercel rewrite file is included.
+Build the frontend from `frontend/` with `npm ci` and `npm run build`. Set `VITE_API_URL` to a browser-reachable HTTPS API base **before the build**. Serve `frontend/dist/` with an `index.html` fallback for React Router. The Vercel rewrite file is included.
 
 Start the API from the repository root:
 

@@ -49,14 +49,13 @@ Thresholds also exist in several locations. The detect route reads `model/per_cl
 
 Local operation requires no cloud values. For backend integration, provide a full `https://…supabase.co` URL and the appropriate key in `SUPABASE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, or `SUPABASE_ANON_KEY`. Inspect the chosen service's key precedence and apply [supabase_schema.sql](../supabase_schema.sql) only after reviewing its tables and access policies.
 
-Frontend clients are inconsistent: `frontend/src/api/supabase.js` and `frontend/src/lib/supabaseClient.js` use different client approaches/key settings. The latter reads `VITE_SUPABASE_KEY` and dynamically imports `@supabase/supabase-js`, which is not declared in the frontend package. The example retains the public `VITE_SUPABASE_ANON_KEY` setting used by the other client. That client also contains hard-coded fallback project settings, so blank frontend values do not disable it if it is imported. Neither client is currently imported by the active frontend source tree. Inspect and test the particular cloud path before enabling it; merely supplying credentials does not complete all integrations. Never expose service-role credentials through a `VITE_*` variable.
+The active frontend uses the FastAPI HTTP client, not a direct Supabase connection. Unused browser clients were removed during cleanup. Configure Supabase through the backend; do not put service-role credentials in browser environment variables.
 
 ## Frontend configuration
 
 Vite reads `frontend/.env` at development startup/build time. A root `.env` is not the frontend template.
 
 - `VITE_API_URL`: browser-reachable HTTP(S) base, normally without a trailing slash.
-- `VITE_WS_URL`: optional complete `ws://` or `wss://` URL including `/ws/waterfall`; otherwise derived from the API URL.
-- Optional public Supabase settings: see above.
+The active frontend does not consume `VITE_WS_URL` or `VITE_SUPABASE_*`. The WebSocket backend remains available to external clients and the included replay script. The unused standalone frontend hook was removed; the Live Survey screen still uses its existing upload and demonstration flow.
 
-The HTTP client and waterfall hook override the API host when the browser hostname contains `render.com` or `onrender.com`, selecting `https://sihnew-backend.onrender.com`. A custom Render deployment must account for that code path; setting `VITE_API_URL` alone may not change its destination.
+The HTTP client overrides the API host when the browser hostname contains `render.com` or `onrender.com`, selecting `https://sihnew-backend.onrender.com`. A custom Render deployment must account for that code path; setting `VITE_API_URL` alone may not change its destination.
