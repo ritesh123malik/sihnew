@@ -6,6 +6,8 @@ This file records documented changes going forward. It does not reconstruct an u
 
 ### Cleanup
 
+- Removed the remaining static idea-submission PDF and its generator, plus the obsolete NOAA report generator. Runtime PDF report exports remain available.
+
 - Removed 37 frontend files unreachable from the application entry point and the unused Three.js dependency.
 - Removed 9 unreferenced backend modules; retained mounted routes, tested services, and training implementations.
 - Removed superseded audit snapshots/generators, legacy backend documentation, an empty root npm lockfile, an unreferenced 1×1 JPEG, and a redundant empty PostCSS config.

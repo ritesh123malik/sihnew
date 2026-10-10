@@ -27,7 +27,6 @@ Backend removals include unused schema definitions, old acoustic-filter helpers,
 - **Dataset copies and showcase manifests.** They serve different curated bundles, generated-dataset verification, and documented upload workflows. Removing them merely because bytes repeat would break those uses.
 - **`backend/requirements.txt`, backend Docker/Procfile/Nixpacks files.** They support the alternate backend-only deployment layout. The root README now correctly acknowledges that requirements file.
 - **GAN weights and optional processing services.** They are referenced by actual processing implementations and tests.
-- **Idea-submission material and its generator.** This is a separate project deliverable, not an obsolete runtime audit.
 - **Threshold copies.** Serving code searches multiple locations with different precedence; deleting copies could change behavior.
 
 ## Verification
@@ -54,6 +53,18 @@ npm --prefix frontend ci
 npm --prefix frontend run build
 node frontend/test_launch_form_data.mjs
 ```
+
+## Additional report cleanup
+
+At the maintainer's request, the remaining static submission PDF and two standalone report generators were also removed:
+
+- `SIH2026_Idea_Submission_SonarSentry_AI.pdf`
+- `scripts/generate_sih_idea_submission_pdf.py`
+- `scripts/generate_noaa_xtf_report_pdf.py`
+
+Neither generator was imported or called by application code, tests, CI, or deployment scripts. Both embedded historical presentation/report text and workstation-specific output paths. No static PDF files remain tracked in the repository. Runtime PDF export services remain available for survey reports and dossiers.
+
+This follow-up changes report artifacts and documentation only. References, Python syntax, and whitespace were checked; the backend suite was not rerun for these standalone-file deletions.
 
 ## Recovery
 
